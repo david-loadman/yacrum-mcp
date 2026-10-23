@@ -1,0 +1,25 @@
+{
+  "name": "yacrum",
+  "displayName": "Yacrum",
+  "version": "0.2.0",
+  "description": "Sales routines on your Yacrum CRM: morning signals, re-engaging a deal, an account pulse before a meeting, and the weekly pipeline review. Outreach is drafted in your own mailbox with the workspace's logging address; nothing is ever sent.",
+  "author": { "name": "David Loadman", "url": "https://github.com/david-loadman" },
+  "homepage": "https://github.com/david-loadman/yacrum-mcp/tree/main/plugin",
+  "repository": "https://github.com/david-loadman/yacrum-mcp",
+  "license": "MIT",
+  "keywords": ["crm", "sales", "yacrum", "pipeline", "outreach"],
+  "userConfig": {
+    "apiKey": {
+      "type": "string",
+      "title": "Yacrum API key",
+      "description": "A key an Admin made for you at Administration → API Keys (yk_…). Choose Read and write to let Claude log activity, create action items and move opportunities.",
+      "sensitive": true
+    },
+    "url": {
+      "type": "string",
+      "title": "Yacrum address",
+      "description": "Your Yacrum address. Leave as it is unless you were given another.",
+      "default": "https://yacrum--yacrum.us-central1.hosted.app"
+    }
+  }
+}

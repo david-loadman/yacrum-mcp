@@ -10,7 +10,7 @@ nothing more. A *read* key cannot change anything.
 
 ## Setup
 
-1. In Yacrum, an Admin opens **Customization → API Keys**, makes a key for you, and copies it. The key is
+1. In Yacrum, an Admin opens **Administration → API Keys**, makes a key for you, and copies it. The key is
    shown only once. Choose **Read and write** if you want the AI to create and update records.
 2. Add the server to your MCP client.
 
@@ -41,7 +41,7 @@ claude mcp add yacrum --env YACRUM_API_KEY=yk_your_key_here -- npx -y yacrum-mcp
 
 | Variable | |
 |---|---|
-| `YACRUM_API_KEY` | Required. A key from Customization → API Keys (`yk_…`). |
+| `YACRUM_API_KEY` | Required. A key from Administration → API Keys (`yk_…`). |
 | `YACRUM_URL` | Your Yacrum address. Defaults to the Yacrum staging site. |
 
 ## Tools
@@ -78,6 +78,20 @@ Every tool says what it does, so your AI client can ask before a write:
 
 Yacrum never sends email. To draft outreach, pair this server with your own Gmail or Microsoft 365
 connector: draft in your mailbox with the BCC from `get_outreach_settings`, and log it with `log_activity`.
+
+## The Claude plugin
+
+[`plugin/`](./plugin) packages this server with four sales routines: morning signals, re-engaging a deal,
+an account pulse before a meeting, and the weekly pipeline review. Outreach is drafted in your own mailbox
+with your workspace's logging address in BCC. Nothing is sent.
+
+```bash
+claude plugin marketplace add david-loadman/yacrum-mcp
+claude plugin install yacrum@yacrum
+```
+
+Setup, including the Gmail and Microsoft 365 connectors and email logging, is in
+[`plugin/SETUP.md`](./plugin/SETUP.md).
 
 ## Limits
 
