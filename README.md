@@ -54,13 +54,30 @@ claude mcp add yacrum --env YACRUM_API_KEY=yk_your_key_here -- npx -y yacrum-mcp
 | `list_contacts`, `create_contact` | Contacts |
 | `list_opportunities`, `create_opportunity`, `update_opportunity`, `move_opportunity_stage` | Deals |
 | `log_activity` | A note on a company, contact, deal or lead: a call, a meeting, a decision |
-| `create_action_item` | A task, optionally on a record, with a due date |
+| `create_action_item`, `list_action_items`, `update_action_item` | Tasks, optionally on a record, with a due date; complete or reopen one |
+| `list_quotes`, `get_quote` | Quotes, with their lines, totals, taxes and status (read only) |
+| `get_signals` | What is worth doing now, and why: quiet and expiring quotes, stale and slipping deals, lost and paused deals to revisit, dormant customers, renewals and referrals |
+| `snooze_signal`, `unsnooze_signal` | Hide a signal from yourself until a day, or bring it back. Works with a read key |
+| `get_outreach_settings` | The address to BCC on a draft so the sent mail is logged, and the workspace's style guide |
+| `pipeline_changes` | What changed since last week's pipeline snapshot: new, advanced, slipped, won, lost and the totals then and now |
 | `get_pipeline`, `pipeline_summary` | The stages, and open deals by stage (totals kept per currency) |
 | `forecast` | Bookings, billings and cash by month (Admin, Management and Sales) |
 | `qualification_score` | A deal's qualification answers, scores and tier |
 | `deal_context` | Everything about one deal in one read, to summarise it |
 
 There is also a **`summarize_deal`** prompt that reads a deal's context and asks for a summary and next steps.
+
+Every tool says what it does, so your AI client can ask before a write:
+
+| Kind | Tools | Annotations |
+|---|---|---|
+| Reads | `whoami`, `search`, every `list_…` and `get_…`, `pipeline_summary`, `forecast`, `qualification_score`, `deal_context`, `pipeline_changes` | read only |
+| Additions | `create_company`, `create_contact`, `create_opportunity`, `create_action_item`, `log_activity` | not destructive |
+| Updates | `update_opportunity`, `update_action_item`, `snooze_signal`, `unsnooze_signal` | not destructive, idempotent |
+| A stage move | `move_opportunity_stage` | **destructive**: a lost or paused stage records a reason and changes the forecast |
+
+Yacrum never sends email. To draft outreach, pair this server with your own Gmail or Microsoft 365
+connector: draft in your mailbox with the BCC from `get_outreach_settings`, and log it with `log_activity`.
 
 ## Limits
 
