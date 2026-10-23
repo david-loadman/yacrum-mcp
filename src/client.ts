@@ -29,7 +29,7 @@ export class YacrumClient {
     this.base = `${config.baseUrl.replace(/\/+$/, '')}/api/v1`;
   }
 
-  async request<T>(method: 'GET' | 'POST' | 'PATCH', path: string, options: { query?: Record<string, string | undefined>; body?: unknown } = {}): Promise<T> {
+  async request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, options: { query?: Record<string, string | undefined>; body?: unknown } = {}): Promise<T> {
     const url = new URL(this.base + path);
     for (const [key, value] of Object.entries(options.query ?? {})) if (value !== undefined && value !== '') url.searchParams.set(key, value);
     const response = await this.fetcher(url, {
@@ -59,5 +59,9 @@ export class YacrumClient {
 
   patch<T>(path: string, body: unknown) {
     return this.request<T>('PATCH', path, { body });
+  }
+
+  delete<T>(path: string) {
+    return this.request<T>('DELETE', path);
   }
 }

@@ -12,7 +12,7 @@ import { YacrumClient } from './client.js';
 import { registerTools } from './tools.js';
 
 export const DEFAULT_URL = 'https://yacrum--yacrum.us-central1.hosted.app';
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 
 async function main() {
   const apiKey = process.env.YACRUM_API_KEY;

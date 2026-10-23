@@ -106,6 +106,81 @@ describe('the Yacrum MCP server', () => {
   });
 });
 
+describe('the signals, outreach, quote, action-item and pipeline-changes tools (#360)', () => {
+  const SIGNAL = 'quote.quiet:00000000-0000-4000-8000-000000000001';
+  let yacrum: ReturnType<typeof fakeYacrum>;
+  beforeEach(() => {
+    yacrum = fakeYacrum({
+      'GET /signals': () => ({ body: { data: { signals: [{ id: SIGNAL }], nextCursor: null } } }),
+      [`POST /signals/${encodeURIComponent(SIGNAL)}/snooze`]: (call) => ({ body: { data: { id: SIGNAL, until: (call.body as { until: string }).until } } }),
+      [`DELETE /signals/${encodeURIComponent(SIGNAL)}/snooze`]: () => ({ body: { data: { id: SIGNAL, removed: true } } }),
+      'GET /workspace/outreach': () => ({ body: { data: { bccAddress: 'acme.k3x9@in.yacrum.com', styleGuide: 'Brief.' } } }),
+      'GET /quotes': () => ({ body: { data: [{ id: 'q1' }] } }),
+      'GET /quotes/q1': () => ({ body: { data: { id: 'q1' } } }),
+      'GET /action-items': () => ({ body: { data: [] } }),
+      'PATCH /action-items/a1': () => ({ body: { data: { id: 'a1', status: 'Completed' } } }),
+      'GET /pipeline/changes': () => ({ status: 429, body: { error: { code: 'plan_limit', message: 'This workspace has used its API calls for the month.', details: { limit: 1000 } } } }),
+    });
+  });
+
+  it('reads the signals with the query Yacrum expects', async () => {
+    const client = await connect(yacrum.fetcher);
+    const result = JSON.parse(text(await client.callTool({ name: 'get_signals', arguments: {
+      scope: 'team', salesPersonId: 'u2', types: ['quote.quiet', 'deal.stale'], limit: 10, includeSnoozed: true,
+    } })));
+    expect(result.signals[0].id).toBe(SIGNAL);
+    const url = yacrum.calls[0].url;
+    expect(url.pathname).toBe('/api/v1/signals');
+    expect(Object.fromEntries(url.searchParams)).toEqual({ scope: 'team', salesPersonId: 'u2', types: 'quote.quiet,deal.stale', limit: '10', includeSnoozed: 'true' });
+  });
+
+  it('snoozes and unsnoozes a signal by its id', async () => {
+    const client = await connect(yacrum.fetcher);
+    expect(JSON.parse(text(await client.callTool({ name: 'snooze_signal', arguments: { signalId: SIGNAL, until: '2026-11-01' } }))))
+      .toEqual({ id: SIGNAL, until: '2026-11-01' });
+    expect(yacrum.calls[0]).toMatchObject({ method: 'POST', body: { until: '2026-11-01' } });
+    expect(JSON.parse(text(await client.callTool({ name: 'unsnooze_signal', arguments: { signalId: SIGNAL } })))).toEqual({ id: SIGNAL, removed: true });
+    expect(yacrum.calls[1].method).toBe('DELETE');
+  });
+
+  it('reads the outreach settings, the quotes and the action items, and completes an item', async () => {
+    const client = await connect(yacrum.fetcher);
+    expect(JSON.parse(text(await client.callTool({ name: 'get_outreach_settings', arguments: {} })))).toEqual({ bccAddress: 'acme.k3x9@in.yacrum.com', styleGuide: 'Brief.' });
+    await client.callTool({ name: 'list_quotes', arguments: { opportunityId: 'o1' } });
+    expect(yacrum.calls.at(-1)!.url.searchParams.get('opportunityId')).toBe('o1');
+    await client.callTool({ name: 'get_quote', arguments: { quoteId: 'q1' } });
+    await client.callTool({ name: 'list_action_items', arguments: { ownerId: 'u1', overdue: true } });
+    expect(Object.fromEntries(yacrum.calls.at(-1)!.url.searchParams)).toEqual({ ownerId: 'u1', overdue: 'true' });
+    await client.callTool({ name: 'update_action_item', arguments: { actionItemId: 'a1', status: 'Completed' } });
+    expect(yacrum.calls.at(-1)).toMatchObject({ method: 'PATCH', body: { status: 'Completed' } });
+  });
+
+  it('passes a plan limit through as a tool error, with its details', async () => {
+    const client = await connect(yacrum.fetcher);
+    const result = await client.callTool({ name: 'pipeline_changes', arguments: { since: '2026-10-16', scope: 'mine' } });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toBe('Yacrum refused (429 plan_limit): This workspace has used its API calls for the month.\n{"limit":1000}');
+  });
+
+  it('tells the client what every tool does, so it can ask before a write', async () => {
+    const client = await connect(yacrum.fetcher);
+    const tools = Object.fromEntries((await client.listTools()).tools.map((t) => [t.name, t.annotations ?? {}]));
+    const reads = ['whoami', 'search', 'list_companies', 'get_company', 'list_company_types', 'list_contacts', 'list_opportunities',
+      'get_pipeline', 'pipeline_summary', 'forecast', 'qualification_score', 'deal_context', 'get_signals', 'get_outreach_settings',
+      'list_quotes', 'get_quote', 'list_action_items', 'pipeline_changes'];
+    for (const name of reads) expect([name, tools[name]]).toEqual([name, { readOnlyHint: true }]);
+    for (const name of ['create_company', 'create_contact', 'create_opportunity', 'log_activity', 'create_action_item']) {
+      expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: false }]);
+    }
+    for (const name of ['update_opportunity', 'update_action_item', 'snooze_signal', 'unsnooze_signal']) {
+      expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: false, idempotentHint: true }]);
+    }
+    expect(tools.move_opportunity_stage).toEqual({ readOnlyHint: false, destructiveHint: true });
+    // Every tool is in one of the lists above: none is left unannotated.
+    expect(Object.keys(tools)).toHaveLength(reads.length + 5 + 4 + 1);
+  });
+});
+
 describe('the pipeline summary', () => {
   it('counts open deals by stage in order, and never adds two currencies together', () => {
     const summary = summarisePipeline(STAGES.stages as never, [

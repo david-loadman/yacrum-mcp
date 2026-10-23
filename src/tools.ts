@@ -35,6 +35,23 @@ interface Me { workspace: { name: string; slug: string }; member: { id: string; 
 interface Stage { id: string; name: string; kind: 'open' | 'paused' | 'won' | 'lost'; position: number; defaultProbability: number | null }
 interface Opportunity { id: string; name: string; companyName: string; stageName: string; stageKind: string; amount?: number; currency?: string; probability: number; expectedCloseDate?: string }
 
+/**
+ * How each tool tells the client what it does, so the client can ask before a
+ * write (#360). A read changes nothing; an additive write makes a record and
+ * destroys none; an update changes a record and doing it twice is the same as
+ * once; a stage move is consequential — a lost or paused stage records a reason
+ * and changes the forecast.
+ */
+const READ = { readOnlyHint: true } as const;
+const ADDS = { readOnlyHint: false, destructiveHint: false } as const;
+const UPDATES = { readOnlyHint: false, destructiveHint: false, idempotentHint: true } as const;
+const CONSEQUENTIAL = { readOnlyHint: false, destructiveHint: true } as const;
+
+const SIGNAL_TYPES = [
+  'deal.stale', 'deal.slipping', 'deal.no_next_step', 'quote.quiet', 'quote.expiring',
+  'deal.lost_revisit', 'deal.paused_revisit', 'account.dormant', 'account.renewal', 'contact.referral',
+] as const;
+
 const ID = z.string().min(1);
 const DAY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
 
@@ -44,14 +61,14 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
   server.registerTool('whoami', {
     title: 'Who am I in Yacrum',
     description: 'The Yacrum workspace this key opens, the member it acts as (and their role), whether it can write, and this month\'s API usage.',
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, run(() => me()));
 
   server.registerTool('search', {
     title: 'Search Yacrum',
     description: 'Find companies, contacts, opportunities and open leads whose name contains the text. Returns ids to use with the other tools.',
     inputSchema: { query: z.string().min(1).describe('Part of a name') },
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, async ({ query }) => run(async () => {
     const needle = query.toLowerCase();
     const [companies, contacts, opportunities, leads] = await Promise.all([
@@ -74,14 +91,14 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
     title: 'List companies',
     description: 'The workspace\'s companies, optionally only those whose name contains `search`.',
     inputSchema: { search: z.string().optional() },
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, async ({ search }) => run(() => yacrum.get('/companies', { search }))());
 
   server.registerTool('get_company', {
     title: 'Get a company',
     description: 'One company, with its addresses, counts and custom fields.',
     inputSchema: { companyId: ID },
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, async ({ companyId }) => run(() => yacrum.get(`/companies/${encodeURIComponent(companyId)}`))());
 
   server.registerTool('create_company', {
@@ -93,6 +110,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
       websiteURL: z.string().url().optional(),
       currency: z.enum(['USD', 'CAD']).optional(),
     },
+    annotations: ADDS,
   }, async (input) => run(async () => {
     const typeId = input.typeId ?? (await yacrum.get<Array<{ id: string }>>('/company-types'))[0]?.id;
     return yacrum.post('/companies', { ...input, typeId });
@@ -101,14 +119,14 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
   server.registerTool('list_company_types', {
     title: 'List company types',
     description: 'The workspace\'s company types, in its order.',
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, run(() => yacrum.get('/company-types')));
 
   server.registerTool('list_contacts', {
     title: 'List contacts',
     description: 'Contacts, optionally of one company or matching a name.',
     inputSchema: { companyId: z.string().optional(), search: z.string().optional() },
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, async ({ companyId, search }) => run(() => yacrum.get('/contacts', { companyId, search }))());
 
   server.registerTool('create_contact', {
@@ -122,6 +140,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
       officePhone: z.string().optional(),
       mobilePhone: z.string().optional(),
     },
+    annotations: ADDS,
   }, async (input) => run(() => yacrum.post('/contacts', input))());
 
   server.registerTool('list_opportunities', {
@@ -132,7 +151,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
       salesPersonId: z.string().optional(),
       kinds: z.array(z.enum(['open', 'paused', 'won', 'lost'])).optional(),
     },
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, async ({ companyId, salesPersonId, kinds }) => run(() => yacrum.get('/opportunities', {
     companyId, salesPersonId, kinds: kinds?.join(','), limit: '2000',
   }))());
@@ -151,6 +170,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
       salesPersonId: z.string().optional(),
       description: z.string().optional(),
     },
+    annotations: ADDS,
   }, async (input) => run(async () => {
     const [{ member }, { stages }] = await Promise.all([me(), yacrum.get<{ stages: Stage[] }>('/pipeline')]);
     const stage = stages.find((s) => s.id === input.stageId) ?? stages.find((s) => s.kind === 'open');
@@ -174,6 +194,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
       expectedCloseDate: DAY.optional(),
       includeInForecast: z.boolean().optional(),
     },
+    annotations: UPDATES,
   }, async ({ opportunityId, ...fields }) => run(() => yacrum.patch(`/opportunities/${encodeURIComponent(opportunityId)}`, fields))());
 
   server.registerTool('move_opportunity_stage', {
@@ -187,6 +208,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
       pauseReason: z.string().optional(),
       probability: z.number().int().min(0).max(100).optional(),
     },
+    annotations: CONSEQUENTIAL,
   }, async ({ opportunityId, ...move }) => run(() => yacrum.post(`/opportunities/${encodeURIComponent(opportunityId)}/stage`, move))());
 
   server.registerTool('log_activity', {
@@ -198,6 +220,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
       title: z.string().min(1).max(200),
       description: z.string().min(1).max(5000),
     },
+    annotations: ADDS,
   }, async (input) => run(() => yacrum.post('/notes', input))());
 
   server.registerTool('create_action_item', {
@@ -212,19 +235,20 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
       companyId: z.string().optional(),
       contactId: z.string().optional(),
     },
+    annotations: ADDS,
   }, async (input) => run(async () => yacrum.post('/action-items', { ...input, ownerId: input.ownerId ?? (await me()).member.id }))());
 
   server.registerTool('get_pipeline', {
     title: 'Get the pipeline\'s stages',
     description: 'The workspace\'s stages in order, each with its kind (open, paused, won, lost) and default probability, and its lost reasons.',
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, run(() => yacrum.get('/pipeline')));
 
   server.registerTool('pipeline_summary', {
     title: 'Pipeline summary',
     description: 'Open deals by stage: how many and how much, in each currency, and the probability-weighted total. Optionally one sales person\'s.',
     inputSchema: { salesPersonId: z.string().optional() },
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, async ({ salesPersonId }) => run(async () => {
     const [{ stages }, deals] = await Promise.all([
       yacrum.get<{ stages: Stage[] }>('/pipeline'),
@@ -237,22 +261,112 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
     title: 'Forecast',
     description: 'Bookings, billings and cash by month, before tax, from won deals and open deals in the forecast (Admin, Management, Sales).',
     inputSchema: { currency: z.enum(['USD', 'CAD']).optional() },
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, async ({ currency }) => run(() => yacrum.get('/forecast', { currency }))());
 
   server.registerTool('qualification_score', {
     title: 'Qualification score',
     description: 'A deal\'s qualification under the workspace\'s framework: each answer, the category and total scores, and its tier.',
     inputSchema: { opportunityId: ID },
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, async ({ opportunityId }) => run(() => yacrum.get(`/qualifications/${encodeURIComponent(opportunityId)}`))());
 
   server.registerTool('deal_context', {
     title: 'Deal context',
     description: 'Everything about one deal in one read, to summarise it: the deal, its company and contact, stage history, quotes, qualification, open action items, notes, recent activity, and whether you may edit it.',
     inputSchema: { opportunityId: ID },
-    annotations: { readOnlyHint: true },
+    annotations: READ,
   }, async ({ opportunityId }) => run(() => yacrum.get(`/opportunities/${encodeURIComponent(opportunityId)}/context`))());
+
+  server.registerTool('get_signals', {
+    title: 'Signals: what is worth doing now',
+    description: 'What is worth doing now, and why, highest priority first: quotes gone quiet or about to expire, stale or slipping opportunities and ones with no next step, lost and paused opportunities worth revisiting, dormant customers, renewals coming up and contacts to ask for a referral. Each has a plain-English reason, evidence (with the last purchase, last inquiry and country of the contact, for CASL), who to contact, and a suggested action. Yacrum gives no legal verdict and sends nothing.',
+    inputSchema: {
+      scope: z.enum(['mine', 'team']).optional().describe('mine (default): the key\'s member\'s opportunities and accounts. team: the whole workspace'),
+      salesPersonId: z.string().optional().describe('With scope team: one member\'s view'),
+      types: z.array(z.enum(SIGNAL_TYPES)).optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      cursor: z.string().optional().describe('nextCursor from the page before'),
+      includeSnoozed: z.boolean().optional(),
+    },
+    annotations: READ,
+  }, async ({ scope, salesPersonId, types, limit, cursor, includeSnoozed }) => run(() => yacrum.get('/signals', {
+    scope, salesPersonId, types: types?.join(','), limit: limit?.toString(), cursor, includeSnoozed: includeSnoozed ? 'true' : undefined,
+  }))());
+
+  server.registerTool('snooze_signal', {
+    title: 'Snooze a signal',
+    description: 'Hide a signal from the key\'s member until a day (at most a year away). It comes back early if its record sees new activity. Only the member\'s own view changes; a read key may snooze.',
+    inputSchema: { signalId: ID.describe('The signal\'s id, type:recordId'), until: DAY },
+    annotations: UPDATES,
+  }, async ({ signalId, until }) => run(() => yacrum.post(`/signals/${encodeURIComponent(signalId)}/snooze`, { until }))());
+
+  server.registerTool('unsnooze_signal', {
+    title: 'Bring a snoozed signal back',
+    description: 'Remove the key\'s member\'s snooze on a signal. Safe to repeat.',
+    inputSchema: { signalId: ID },
+    annotations: UPDATES,
+  }, async ({ signalId }) => run(() => yacrum.delete(`/signals/${encodeURIComponent(signalId)}/snooze`))());
+
+  server.registerTool('get_outreach_settings', {
+    title: 'Outreach settings',
+    description: 'For drafting a member\'s email: the workspace\'s BCC logging address (put it on every draft so the sent mail is logged to the contact; null when an Admin has not turned logging on) and its outreach style guide.',
+    annotations: READ,
+  }, run(() => yacrum.get('/workspace/outreach')));
+
+  server.registerTool('list_quotes', {
+    title: 'List quotes',
+    description: 'Quotes, optionally only one opportunity\'s, with their status, revision, expiry and totals.',
+    inputSchema: { opportunityId: z.string().optional() },
+    annotations: READ,
+  }, async ({ opportunityId }) => run(() => yacrum.get('/quotes', { opportunityId }))());
+
+  server.registerTool('get_quote', {
+    title: 'Get a quote',
+    description: 'One quote with its lines, totals, taxes, status history and acceptance.',
+    inputSchema: { quoteId: ID },
+    annotations: READ,
+  }, async ({ quoteId }) => run(() => yacrum.get(`/quotes/${encodeURIComponent(quoteId)}`))());
+
+  server.registerTool('list_action_items', {
+    title: 'List action items',
+    description: 'Action items, optionally one member\'s, one opportunity\'s or one company\'s, open or completed, or only overdue ones.',
+    inputSchema: {
+      ownerId: z.string().optional(),
+      opportunityId: z.string().optional(),
+      companyId: z.string().optional(),
+      status: z.enum(['Open', 'Completed']).optional(),
+      overdue: z.boolean().optional(),
+    },
+    annotations: READ,
+  }, async ({ ownerId, opportunityId, companyId, status, overdue }) => run(() => yacrum.get('/action-items', {
+    ownerId, opportunityId, companyId, status, overdue: overdue ? 'true' : undefined,
+  }))());
+
+  server.registerTool('update_action_item', {
+    title: 'Update an action item',
+    description: 'Complete or reopen an action item (status), or change its title, description, due date or owner (Admin, Sales, or its owner).',
+    inputSchema: {
+      actionItemId: ID,
+      status: z.enum(['Open', 'Completed']).optional(),
+      title: z.string().min(1).max(200).optional(),
+      description: z.string().optional(),
+      dueDate: DAY.optional(),
+      ownerId: z.string().optional(),
+    },
+    annotations: UPDATES,
+  }, async ({ actionItemId, ...fields }) => run(() => yacrum.patch(`/action-items/${encodeURIComponent(actionItemId)}`, fields))());
+
+  server.registerTool('pipeline_changes', {
+    title: 'Pipeline changes since last week',
+    description: 'What changed since a weekly snapshot: opportunities new, advanced, regressed, won, lost, paused or removed, those whose close date slipped or amount changed, and the open pipeline\'s totals then and now per currency.',
+    inputSchema: {
+      since: DAY.optional().describe('Compared with the latest weekly snapshot on or before this day; a week ago by default'),
+      scope: z.enum(['mine', 'team']).optional(),
+      salesPersonId: z.string().optional(),
+    },
+    annotations: READ,
+  }, async ({ since, scope, salesPersonId }) => run(() => yacrum.get('/pipeline/changes', { since, scope, salesPersonId }))());
 
   server.registerPrompt('summarize_deal', {
     title: 'Summarise a deal',
