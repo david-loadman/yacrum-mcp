@@ -1,0 +1,16 @@
+{
+  "name": "yacrum",
+  "description": "Yacrum CRM for Claude: the MCP server and the sales routines that run on it",
+  "owner": {
+    "name": "David Loadman",
+    "url": "https://github.com/david-loadman"
+  },
+  "plugins": [
+    {
+      "name": "yacrum",
+      "source": "./plugin",
+      "description": "Morning signals, re-engaging a deal, an account pulse before a meeting, and the weekly pipeline review, on your Yacrum data. Drafts go to your own mailbox; nothing is sent.",
+      "version": "0.2.0"
+    }
+  ]
+}
