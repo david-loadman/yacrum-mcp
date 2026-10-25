@@ -16,7 +16,7 @@ export class YacrumApiError extends Error {
 export interface YacrumConfig {
   /** e.g. https://yacrum--yacrum.us-central1.hosted.app */
   baseUrl: string;
-  /** a key from Customization → API Keys: yk_… */
+  /** a key from Administration → API Keys: yk_… */
   apiKey: string;
 }
 

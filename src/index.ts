@@ -2,7 +2,7 @@
 /**
  * yacrum-mcp: an MCP server for the Yacrum CRM, over stdio.
  *
- *   YACRUM_API_KEY  a key from Yacrum → Customization → API Keys (required)
+ *   YACRUM_API_KEY  a key from Yacrum → Administration → API Keys (required)
  *   YACRUM_URL      your Yacrum address (default: the Yacrum staging site)
  */
 
@@ -12,12 +12,12 @@ import { YacrumClient } from './client.js';
 import { registerTools } from './tools.js';
 
 export const DEFAULT_URL = 'https://yacrum--yacrum.us-central1.hosted.app';
-const VERSION = '0.2.0';
+const VERSION = '0.2.1';
 
 async function main() {
   const apiKey = process.env.YACRUM_API_KEY;
   if (!apiKey || !/^yk_[A-Za-z0-9_-]{40}$/.test(apiKey)) {
-    console.error('yacrum-mcp: set YACRUM_API_KEY to a key from Yacrum → Customization → API Keys.');
+    console.error('yacrum-mcp: set YACRUM_API_KEY to a key from Yacrum → Administration → API Keys.');
     process.exit(1);
   }
   const server = new McpServer({ name: 'yacrum', version: VERSION });
