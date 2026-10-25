@@ -98,6 +98,27 @@ Setup, including the Gmail and Microsoft 365 connectors and email logging, is in
 Every call counts against your workspace plan's monthly API calls. One key may make 120 requests a minute.
 When a limit is reached, Yacrum's refusal says so, and the server passes it on to the AI as a tool error.
 
+## Releasing
+
+npm releases are **staged** and need a maintainer's approval with 2FA. A version goes live in three steps:
+
+1. **Bump the version** in `package.json` and `VERSION` in `src/index.ts`, and merge.
+2. **Publish a GitHub release** tagged `v<version>`. The *Stage on npm* workflow checks that the tag matches,
+   builds, tests, and runs `npm stage publish`. It has no token: it authenticates through npm's trusted
+   publishing, and npm attaches provenance automatically.
+3. **Approve it with 2FA**, either on the package's page at npmjs.com, or with:
+
+   ```bash
+   npm stage list
+   npm stage approve <stage-id>
+   ```
+
+   `npm stage reject <stage-id>` discards a staged version instead.
+
+The trusted publisher on npmjs.com (user `david-loadman`, repository `yacrum-mcp`, workflow `publish.yml`)
+does **not** allow `npm publish`. Leave it that way: a compromised workflow can then stage a version but never
+ship one.
+
 ## Development
 
 ```bash

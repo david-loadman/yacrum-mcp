@@ -1,6 +1,13 @@
-# Publishes to npm when a release is published on GitHub (tag v<version>, matching package.json).
-# ⚑ Needs the repository secret NPM_TOKEN: an npm automation token with publish access to `yacrum-mcp`.
-name: Publish
+# Stages a release on npm when a release is published on GitHub (tag v<version>, matching package.json).
+#
+# ⛔ NO TOKEN. It authenticates with npm's TRUSTED PUBLISHING (GitHub's OIDC identity), configured on the
+# package at npmjs.com → yacrum-mcp → Settings → Trusted Publisher: user `david-loadman`, repository
+# `yacrum-mcp`, workflow `publish.yml`, and `npm publish` NOT allowed. Provenance is attached automatically.
+#
+# ⛔ IT STAGES; IT DOES NOT PUBLISH. The version goes live only when a maintainer approves it with 2FA —
+# on npmjs.com, or `npm stage list` then `npm stage approve <stage-id>`. A compromised workflow can stage
+# a version but never ship one. See README → Releasing.
+name: Stage on npm
 on:
   release:
     types: [published]
@@ -8,7 +15,7 @@ permissions:
   contents: read
   id-token: write
 jobs:
-  publish:
+  stage:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -17,9 +24,10 @@ jobs:
           node-version: 22
           cache: npm
           registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+      - run: npm install -g npm@latest
       - run: npm ci
       - name: The tag is the package's version
         run: test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}"
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm run build && npm test
+      - run: npm stage publish --access public
