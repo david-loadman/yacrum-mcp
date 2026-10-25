@@ -18,11 +18,16 @@ jobs:
   stage:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # ⛔ Pinned to exact commits: this job can stage a release, so the actions it runs must not change
+      # under it. Bump by updating the SHA and the version comment together.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # ⚑ No dependency cache: a release build starts clean, so a poisoned cache cannot reach what is staged.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: npm
+          package-manager-cache: false
           registry-url: https://registry.npmjs.org
       # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
       - run: npm install -g npm@latest
