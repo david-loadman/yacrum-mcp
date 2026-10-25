@@ -1,0 +1,8 @@
+# Keeps the workflows' actions current, the commit-pinned ones in publish.yml included:
+# a monthly pull request per update, which CI checks before anyone merges it.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
