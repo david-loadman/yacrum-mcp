@@ -73,7 +73,8 @@ the contact and their company.
 - **Turning it on:** an Admin turns logging on at **Administration → Workspace → Email logging**. Until then,
   Claude still drafts and tells you the email won't be logged.
 - ⚠️ **Only mail from your own sign-in address is logged.** Mail sent from an alias or a personal account is
-  not.
+  not. If your mailbox can send as your sign-in address (Gmail's *Send mail as*, Outlook's *From*), pick it as
+  the draft's From before you send, and the mail is logged.
 - **Replies:** a reply stays in your inbox. Copy the logging address on your answer, or forward the reply to
   it, to log it too.
 - **The style guide:** an Admin can write an outreach style guide at **Administration → Workspace**, covering

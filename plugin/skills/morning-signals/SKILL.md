@@ -47,7 +47,7 @@ End with the counts by type for anything you left out, e.g. *"Also: 4 stale oppo
 - **Draft it:**
   1. `deal_context` for the opportunity.
   2. The rep's recent sent mail and their last thread with the contact.
-  3. Draft with the BCC, then `log_activity`, as `outreach-rules` says.
+  3. Call `get_outreach_settings` for this draft, draft with its BCC, then `log_activity`, as `outreach-rules` says.
 - **Make it a task:** `create_action_item` on the opportunity, with a short title, a due date (tomorrow
   unless the rep says otherwise) and the reason as the description.
 - **Snooze:** `snooze_signal` with the signal's `id` and an `until` date. It comes back early if anything

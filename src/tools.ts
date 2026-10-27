@@ -280,7 +280,18 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
 
   server.registerTool('get_signals', {
     title: 'Signals: what is worth doing now',
-    description: 'What is worth doing now, and why, highest priority first: quotes gone quiet or about to expire, stale or slipping opportunities and ones with no next step, lost and paused opportunities worth revisiting, dormant customers, renewals coming up and contacts to ask for a referral. Each has a plain-English reason, evidence (with the last purchase, last inquiry and country of the contact, for CASL), who to contact, and a suggested action. Yacrum gives no legal verdict and sends nothing.',
+    description: 'What is worth doing now, and why, highest priority first. Each signal has a plain-English reason, evidence, who to contact, and a suggested action. The types, with day and month thresholds set by the workspace (defaults shown): '
+      + 'deal.stale — an open opportunity with no activity for 14 days or more. '
+      + 'deal.slipping — an open opportunity whose expected close date has passed. '
+      + 'deal.no_next_step — an open opportunity with no open action item. '
+      + 'quote.quiet — a quote sent 7 days or more ago with nothing on its opportunity since. '
+      + 'quote.expiring — a sent quote expiring within 7 days, or expired in the last 14, on an opportunity not yet closed. '
+      + 'deal.lost_revisit — an opportunity lost 6 to 18 months ago, with nothing new opened at its company since. '
+      + 'deal.paused_revisit — an opportunity paused 60 days or more ago. '
+      + 'account.dormant — a customer (a won opportunity) with nothing open and no activity for 90 days. '
+      + 'account.renewal — a won opportunity with recurring quote lines, coming up to an anniversary of its win within 60 days. '
+      + 'contact.referral — the primary contact of an opportunity won 60 to 365 days ago. '
+      + 'On the lost, paused and customer types, evidence carries the contact\'s last purchase, last inquiry and country, for CASL. Yacrum gives no legal verdict and sends nothing.',
     inputSchema: {
       scope: z.enum(['mine', 'team']).optional().describe('mine (default): the key\'s member\'s opportunities and accounts. team: the whole workspace'),
       salesPersonId: z.string().optional().describe('With scope team: one member\'s view'),
@@ -310,7 +321,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
 
   server.registerTool('get_outreach_settings', {
     title: 'Outreach settings',
-    description: 'For drafting a member\'s email: the workspace\'s BCC logging address (put it on every draft so the sent mail is logged to the contact; null when an Admin has not turned logging on) and its outreach style guide.',
+    description: 'For drafting a member\'s email: the workspace\'s BCC logging address (put it on every draft so the sent mail is logged to the contact; null when an Admin has not turned logging on) and its outreach style guide. Call it again before each draft: the address changes when logging is turned off and on, and an old one logs nothing.',
     annotations: READ,
   }, run(() => yacrum.get('/workspace/outreach')));
 
