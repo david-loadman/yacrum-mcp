@@ -130,6 +130,10 @@ YACRUM_API_KEY=yk_… node dist/index.js
 
 The Yacrum API is described at `<YACRUM_URL>/api/v1/openapi.json`.
 
+⚠️ **`npx yacrum-mcp` fails inside a clone of this repository**, including when Claude Code is started in it:
+npm resolves `yacrum-mcp` to the local package instead of the published one, and finds no command to run. Start
+Claude Code, or `npx`, from another directory, or point the MCP config at `node <clone>/dist/index.js`.
+
 ## Licence
 
 MIT

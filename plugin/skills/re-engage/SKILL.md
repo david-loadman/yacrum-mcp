@@ -23,7 +23,8 @@ Call `deal_context`. It returns:
 - the qualification
 - open action items, notes and recent activity
 
-Also call `get_outreach_settings`, unless you already have it this session.
+Also call `get_outreach_settings` for the style guide. Its BCC address is read again just before the draft
+(step 4): never reuse one read earlier (`outreach-rules` §2).
 
 From this, work out:
 - **What happened:**
@@ -42,7 +43,7 @@ In two or three lines, tell the rep why now and what the email will say. Wait fo
 ## 4. Draft, log, follow up
 
 1. Read the rep's recent sent mail and their last thread with this contact.
-2. Create the draft in the rep's mailbox with the BCC. Show the subject and body in the chat as well.
+2. Call `get_outreach_settings` again, then create the draft in the rep's mailbox with its BCC. Show the subject and body in the chat as well.
 3. `log_activity` on the opportunity.
 4. Offer `create_action_item`: "Follow up with <contact> if no reply", due in 5 business days unless the rep
    says otherwise.
