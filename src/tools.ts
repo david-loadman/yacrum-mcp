@@ -273,7 +273,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
 
   server.registerTool('deal_context', {
     title: 'Deal context',
-    description: 'Everything about one deal in one read, to summarise it: the deal, its company and contact, stage history, quotes, qualification, open action items, notes, recent activity, and whether you may edit it.',
+    description: 'Everything about one deal in one read, to summarise it or draft to it: the deal, its company and contact, stage history, quotes, qualification, open action items, notes, recent activity, whether you may edit it, and consent: the CASL facts (the company\'s last purchase; each contact\'s country and last inquiry) for the primary contact and the quote\'s contact. Facts, never a verdict.',
     inputSchema: { opportunityId: ID },
     annotations: READ,
   }, async ({ opportunityId }) => run(() => yacrum.get(`/opportunities/${encodeURIComponent(opportunityId)}/context`))());
@@ -291,7 +291,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
       + 'account.dormant — a customer (a won opportunity) with nothing open and no activity for 90 days. '
       + 'account.renewal — a won opportunity with recurring quote lines, coming up to an anniversary of its win within 60 days. '
       + 'contact.referral — the primary contact of an opportunity won 60 to 365 days ago. '
-      + 'On the lost, paused and customer types, evidence carries the contact\'s last purchase, last inquiry and country, for CASL. Yacrum gives no legal verdict and sends nothing.',
+      + 'On the lost, paused and customer types, evidence carries the contact\'s last purchase, last inquiry and country, for CASL; before any draft, deal_context carries them for every contact. Yacrum gives no legal verdict and sends nothing.',
     inputSchema: {
       scope: z.enum(['mine', 'team']).optional().describe('mine (default): the key\'s member\'s opportunities and accounts. team: the whole workspace'),
       salesPersonId: z.string().optional().describe('With scope team: one member\'s view'),

@@ -55,10 +55,14 @@ If the key is read-only, `log_activity` is refused: say so once and carry on dra
 
 ## 5. Consent (CASL) — facts, never a verdict
 
-For a contact whose `evidence.contactCountryCode` is `CA` (or whose company is in Canada), show the rep the
-facts Yacrum returns before they send: `lastPurchaseAt`, `lastInquiryAt`. For example: *"Canadian contact.
-Last purchase: 2025-03-14. Last inquiry from them: none on record."* Do not say whether the message is
-allowed. This is not legal advice, and the decision is the rep's.
+Every draft reads `deal_context` first, and its `consent` holds the facts for each contact you may write to:
+`consent.lastPurchaseAt` (the company's), and in `consent.contacts` the entry whose `contactId` is the person
+you are writing to — the primary contact, or the quote's contact for a quote — with their `countryCode` and
+`lastInquiryAt`. Use that entry even when a signal's `evidence` has facts too.
+
+When that contact's `countryCode` is `CA` (or their company is in Canada), show the rep the facts before they
+send. For example: *"Canadian contact. Last purchase: 2025-03-14. Last inquiry from them: none on record."*
+Do not say whether the message is allowed. This is not legal advice, and the decision is the rep's.
 
 ## 6. Writes need the rep's say-so
 
