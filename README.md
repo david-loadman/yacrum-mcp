@@ -53,6 +53,7 @@ claude mcp add yacrum --env YACRUM_API_KEY=yk_your_key_here -- npx -y yacrum-mcp
 | `list_companies`, `get_company`, `create_company`, `list_company_types` | Companies |
 | `list_contacts`, `create_contact` | Contacts |
 | `list_opportunities`, `create_opportunity`, `update_opportunity`, `move_opportunity_stage` | Deals |
+| `set_sales_health` | A deal's Sales Health (G on track, Y at risk, R off track) and the note saying why, always together |
 | `log_activity` | A note on a company, contact, deal or lead: a call, a meeting, a decision |
 | `create_action_item`, `list_action_items`, `update_action_item` | Tasks, optionally on a record, with a due date; complete or reopen one |
 | `list_quotes`, `get_quote` | Quotes, with their lines, totals, taxes and status (read only) |
@@ -73,7 +74,7 @@ Every tool says what it does, so your AI client can ask before a write:
 |---|---|---|
 | Reads | `whoami`, `search`, every `list_…` and `get_…`, `pipeline_summary`, `forecast`, `qualification_score`, `deal_context`, `pipeline_changes` | read only |
 | Additions | `create_company`, `create_contact`, `create_opportunity`, `create_action_item`, `log_activity` | not destructive |
-| Updates | `update_opportunity`, `update_action_item`, `snooze_signal`, `unsnooze_signal` | not destructive, idempotent |
+| Updates | `update_opportunity`, `set_sales_health`, `update_action_item`, `snooze_signal`, `unsnooze_signal` | not destructive, idempotent |
 | A stage move | `move_opportunity_stage` | **destructive**: a lost or paused stage records a reason and changes the forecast |
 
 Yacrum never sends email. To draft outreach, pair this server with your own Gmail or Microsoft 365
