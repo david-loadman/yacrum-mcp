@@ -112,6 +112,41 @@ describe('the Yacrum MCP server', () => {
     expect(yacrum.calls).toHaveLength(1);
   });
 
+  it('scores an opportunity with PUT, naming the template as frameworkId, and reads the templates and the gates', async () => {
+    yacrum = fakeYacrum({
+      'GET /scoring-templates': () => ({ body: { data: [{ id: 't1', name: 'Opportunity Score', isDefault: true }] } }),
+      'PUT /qualifications/o1': () => ({ body: { data: { id: 'o1', percent: 72.5 } } }),
+      'GET /opportunities/o1/gates': () => ({ body: { data: { stages: [], readyFor: { stageId: 's2', stageName: 'Qualified' } } } }),
+    });
+    const client = await connect(yacrum.fetcher);
+    await client.callTool({ name: 'list_scoring_templates', arguments: {} });
+    expect(yacrum.calls[0]).toMatchObject({ method: 'GET' });
+    const scored = await client.callTool({ name: 'score_opportunity', arguments: { opportunityId: 'o1', templateId: 't2', answers: { q1: 7, q2: 'opt-1', q3: null } } });
+    expect(scored.isError).toBeFalsy();
+    expect(yacrum.calls[1]).toMatchObject({ method: 'PUT', body: { frameworkId: 't2', answers: { q1: 7, q2: 'opt-1', q3: null } } });
+    await client.callTool({ name: 'score_opportunity', arguments: { opportunityId: 'o1', answers: { q1: 8 } } });
+    expect(yacrum.calls[2].body).toEqual({ answers: { q1: 8 } });
+    const ready = await client.callTool({ name: 'stage_readiness', arguments: { opportunityId: 'o1' } });
+    expect(JSON.parse(text(ready)).readyFor.stageName).toBe('Qualified');
+  });
+
+  it('sends an override reason as override, and passes a 409 stage_gate through with what is unmet', async () => {
+    const unmet = [{ kind: 'quote', stageName: 'Pre-SOW', now: null }];
+    yacrum = fakeYacrum({
+      'POST /opportunities/o1/stage': (call) => ((call.body as { override?: unknown }).override
+        ? { body: { data: { id: 'o1' } } }
+        : { status: 409, body: { error: { code: 'stage_gate', message: 'Pre-SOW needs: a sent quote (there is no quote).', details: { unmet } } } }),
+    });
+    const client = await connect(yacrum.fetcher);
+    const refused = await client.callTool({ name: 'move_opportunity_stage', arguments: { opportunityId: 'o1', stageId: 's3' } });
+    expect(refused.isError).toBe(true);
+    expect(text(refused)).toContain('409 stage_gate');
+    expect(text(refused)).toContain('"stageName":"Pre-SOW"');
+    const moved = await client.callTool({ name: 'move_opportunity_stage', arguments: { opportunityId: 'o1', stageId: 's3', overrideReason: 'Quote is with legal' } });
+    expect(moved.isError).toBeFalsy();
+    expect(yacrum.calls[1].body).toEqual({ stageId: 's3', override: { reason: 'Quote is with legal' } });
+  });
+
   it('relays Yacrum’s refusal as a tool error the model can read', async () => {
     const client = await connect(yacrum.fetcher);
     const result = await client.callTool({ name: 'move_opportunity_stage', arguments: { opportunityId: 'o1', stageId: 's-lost' } });
@@ -181,7 +216,7 @@ describe('the signals, outreach, quote, action-item and pipeline-changes tools (
     const tools = Object.fromEntries((await client.listTools()).tools.map((t) => [t.name, t.annotations ?? {}]));
     const reads = ['whoami', 'search', 'list_companies', 'get_company', 'list_company_types', 'list_contacts', 'list_opportunities',
       'get_pipeline', 'pipeline_summary', 'forecast', 'qualification_score', 'deal_context', 'get_signals', 'get_outreach_settings',
-      'list_quotes', 'get_quote', 'list_action_items', 'pipeline_changes'];
+      'list_quotes', 'get_quote', 'list_action_items', 'pipeline_changes', 'list_scoring_templates', 'stage_readiness'];
     for (const name of reads) expect([name, tools[name]]).toEqual([name, { readOnlyHint: true }]);
     for (const name of ['create_company', 'create_contact', 'create_opportunity', 'log_activity', 'create_action_item']) {
       expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: false }]);
@@ -190,8 +225,10 @@ describe('the signals, outreach, quote, action-item and pipeline-changes tools (
       expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: false, idempotentHint: true }]);
     }
     expect(tools.move_opportunity_stage).toEqual({ readOnlyHint: false, destructiveHint: true });
+    // ⚑ Scoring on another template deletes the old answers.
+    expect(tools.score_opportunity).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     // Every tool is in one of the lists above: none is left unannotated.
-    expect(Object.keys(tools)).toHaveLength(reads.length + 5 + 5 + 1);
+    expect(Object.keys(tools)).toHaveLength(reads.length + 5 + 5 + 1 + 1);
   });
 });
 

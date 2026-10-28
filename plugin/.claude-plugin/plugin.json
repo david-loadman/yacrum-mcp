@@ -1,8 +1,8 @@
 {
   "name": "yacrum",
   "displayName": "Yacrum",
-  "version": "0.2.3",
-  "description": "Sales routines on your Yacrum CRM: morning signals, re-engaging a deal, an account pulse before a meeting, and the weekly pipeline review. Outreach is drafted in your own mailbox with the workspace's logging address; nothing is ever sent.",
+  "version": "0.3.0",
+  "description": "Sales routines on your Yacrum CRM: morning signals, re-engaging a deal, an account pulse before a meeting, the weekly pipeline review, and qualifying an opportunity against its scoring template and stage gates. Outreach is drafted in your own mailbox with the workspace's logging address; nothing is ever sent.",
   "author": { "name": "David Loadman", "url": "https://github.com/david-loadman" },
   "homepage": "https://github.com/david-loadman/yacrum-mcp/tree/main/plugin",
   "repository": "https://github.com/david-loadman/yacrum-mcp",

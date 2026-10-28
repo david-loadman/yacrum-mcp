@@ -2,7 +2,7 @@
   "mcpServers": {
     "yacrum": {
       "command": "npx",
-      "args": ["-y", "yacrum-mcp@^0.2.0"],
+      "args": ["-y", "yacrum-mcp@^0.3.0"],
       "env": {
         "YACRUM_API_KEY": "${user_config.apiKey}",
         "YACRUM_URL": "${user_config.url}"

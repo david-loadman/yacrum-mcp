@@ -7,7 +7,8 @@ The plugin gives Claude four sales routines that run on your Yacrum data:
 | `/yacrum:morning-signals` | What to work on today and why, with a draft, a task or a snooze for each |
 | `/yacrum:re-engage` | Revive a lost, paused or quiet opportunity with an email draft and a follow-up |
 | `/yacrum:account-pulse` | A one-page brief before a meeting |
-| `/yacrum:pipeline-review` | The weekly review: what moved, slipped, closed and appeared |
+| `/yacrum:pipeline-review` | The weekly review: what moved, slipped, closed and appeared, what is ready to advance and what a stage gate blocks |
+| `/yacrum:qualify-opportunity` | Score an opportunity with you, answer by answer, then say which stage gates are met and offer the next move |
 
 ⛔ **Nothing is ever sent.** Emails are created as **drafts in your own mailbox** for you to read and send.
 
