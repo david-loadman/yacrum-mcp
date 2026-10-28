@@ -63,7 +63,7 @@ claude mcp add yacrum --env YACRUM_API_KEY=yk_your_key_here -- npx -y yacrum-mcp
 | `get_pipeline`, `pipeline_summary` | The stages, and open deals by stage (totals kept per currency) |
 | `forecast` | Bookings, billings and cash by month (Admin, Management and Sales) |
 | `qualification_score` | A deal's qualification answers, scores and tier |
-| `deal_context` | Everything about one deal in one read, to summarise it |
+| `deal_context` | Everything about one deal in one read, to summarise it or draft to it, with the CASL consent facts for its contacts |
 
 There is also a **`summarize_deal`** prompt that reads a deal's context and asks for a summary and next steps.
 

@@ -37,7 +37,8 @@ For each item, give:
 - **Title:** the company and the opportunity or quote, with the amount in its own currency.
 - **Why now:** the `reason`, and one sentence of your own judgment.
 - **The move:** the suggested action in your words.
-- **For a Canadian contact:** the consent facts, as `outreach-rules` §5 says.
+- **For a Canadian contact:** the consent facts when the signal's `evidence` carries them. Every draft shows them
+  from `deal_context`, as `outreach-rules` §5 says.
 - **Options:** *Draft it* · *Make it a task* · *Snooze* (offer 3 days, 1 week or 2 weeks).
 
 End with the counts by type for anything you left out, e.g. *"Also: 4 stale opportunities, 2 referrals."*
