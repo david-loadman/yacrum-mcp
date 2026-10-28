@@ -46,6 +46,8 @@ const READ = { readOnlyHint: true } as const;
 const ADDS = { readOnlyHint: false, destructiveHint: false } as const;
 const UPDATES = { readOnlyHint: false, destructiveHint: false, idempotentHint: true } as const;
 const CONSEQUENTIAL = { readOnlyHint: false, destructiveHint: true } as const;
+/** A write that can delete: scoring on another template drops the old answers. Repeating it changes nothing more. */
+const REPLACES = { readOnlyHint: false, destructiveHint: true, idempotentHint: true } as const;
 
 const SIGNAL_TYPES = [
   'deal.stale', 'deal.slipping', 'deal.no_next_step', 'quote.quiet', 'quote.expiring',
@@ -212,7 +214,9 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
 
   server.registerTool('move_opportunity_stage', {
     title: 'Move an opportunity to a stage',
-    description: 'Move a deal to one of the workspace\'s stages (ids from get_pipeline). A lost stage needs a lostReasonId (and competitorName when the reason asks); a paused stage needs a pauseReason.',
+    description: 'Move a deal to one of the workspace\'s stages (ids from get_pipeline). A lost stage needs a lostReasonId (and competitorName when the reason asks); a paused stage needs a pauseReason. '
+      + 'A forward move is held to the stage gates of every stage up to the target: scoring answers and, on some stages, a sent quote. If one is unmet Yacrum refuses with 409 stage_gate and lists what is missing — check stage_readiness first, and tell the user what is missing rather than retrying. '
+      + 'Only an Admin or a Management member may move past an unmet gate, by sending overrideReason, and only when the user has said why; a Management member\'s key can make no other move. Never invent a reason.',
     inputSchema: {
       opportunityId: ID,
       stageId: ID,
@@ -220,9 +224,20 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
       competitorName: z.string().optional(),
       pauseReason: z.string().optional(),
       probability: z.number().int().min(0).max(100).optional(),
+      overrideReason: z.string().trim().min(1).max(500).optional()
+        .describe('Admin or Management only: why the unmet stage gates are overridden, in the user\'s words. Recorded on the stage history.'),
     },
     annotations: CONSEQUENTIAL,
-  }, async ({ opportunityId, ...move }) => run(() => yacrum.post(`/opportunities/${encodeURIComponent(opportunityId)}/stage`, move))());
+  }, async ({ opportunityId, overrideReason, ...move }) => run(() => yacrum.post(`/opportunities/${encodeURIComponent(opportunityId)}/stage`, {
+    ...move, ...(overrideReason && { override: { reason: overrideReason } }),
+  }))());
+
+  server.registerTool('stage_readiness', {
+    title: 'Stage readiness',
+    description: 'The stage gates ahead of a deal: for each later stage, every gate (a scoring question with what passes and the answer now, or a sent quote) and whether it is met. readyFor is the next stage when every one of its gates is met — offer that move to the user; never make it on your own.',
+    inputSchema: { opportunityId: ID },
+    annotations: READ,
+  }, async ({ opportunityId }) => run(() => yacrum.get(`/opportunities/${encodeURIComponent(opportunityId)}/gates`))());
 
   server.registerTool('log_activity', {
     title: 'Log activity',
@@ -277,16 +292,39 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
     annotations: READ,
   }, async ({ currency }) => run(() => yacrum.get('/forecast', { currency }))());
 
+  server.registerTool('list_scoring_templates', {
+    title: 'Scoring templates',
+    description: 'The workspace\'s scoring templates, the default first: each question (by id) with its kind — scale, answered 1 to 10, or select, answered with one of its options by id — its weight and guidance, the tiers, the most the template can score, and the stage gate a question is (the stage, and the minimum or the passing options). Read it before score_opportunity.',
+    inputSchema: {},
+    annotations: READ,
+  }, async () => run(() => yacrum.get('/scoring-templates'))());
+
+  server.registerTool('score_opportunity', {
+    title: 'Score an opportunity',
+    description: 'Score a deal against a scoring template (Admin, Sales; changing a score: Admin, or Sales on one they made). Unscored, it is scored on templateId, or the default. Scored already, the answers sent are merged in — null clears one — and a different templateId SWITCHES the template, deleting every answer to the old one: say so and get a yes first. '
+      + 'Answers are by question id from list_scoring_templates: a whole number 1 to 10 for a scale question, an option id for a select one. Propose each answer with its reason and write only what the user confirms. Returns the score, its percent of the template\'s maximum, and its tier.',
+    inputSchema: {
+      opportunityId: ID,
+      templateId: z.string().optional().describe('A template id from list_scoring_templates; the default when absent'),
+      answers: z.record(z.string(), z.union([z.number().int().min(1).max(10), z.string().min(1), z.null()]))
+        .describe('By question id: 1–10 for scale, an option id for select, null to clear'),
+      notes: z.string().max(5000).optional(),
+    },
+    annotations: REPLACES,
+  }, async ({ opportunityId, templateId, answers, notes }) => run(() => yacrum.put(`/qualifications/${encodeURIComponent(opportunityId)}`, {
+    answers, ...(templateId && { frameworkId: templateId }), ...(notes !== undefined && { notes }),
+  }))());
+
   server.registerTool('qualification_score', {
     title: 'Qualification score',
-    description: 'A deal\'s qualification under the workspace\'s framework: each answer, the category and total scores, and its tier.',
+    description: 'A deal\'s score under its scoring template: each answer, the category and total scores, percent (of the template\'s maxScore — what deals are ranked by, across templates), the template, and its tier.',
     inputSchema: { opportunityId: ID },
     annotations: READ,
   }, async ({ opportunityId }) => run(() => yacrum.get(`/qualifications/${encodeURIComponent(opportunityId)}`))());
 
   server.registerTool('deal_context', {
     title: 'Deal context',
-    description: 'Everything about one deal in one read, to summarise it or draft to it: the deal (with its Sales Health as status G/Y/R and statusDescription), its company and contact, stage history, quotes, qualification, open action items, notes, recent activity, whether you may edit it, and consent: the CASL facts (the company\'s last purchase; each contact\'s country and last inquiry) for the primary contact and the quote\'s contact. Facts, never a verdict.',
+    description: 'Everything about one deal in one read, to summarise it or draft to it: the deal (with its Sales Health as status G/Y/R and statusDescription), its company and contact, stage history, quotes, qualification, gates (the stage gates ahead and readyFor), open action items, notes, recent activity, whether you may edit it, and consent: the CASL facts (the company\'s last purchase; each contact\'s country and last inquiry) for the primary contact and the quote\'s contact. Facts, never a verdict.',
     inputSchema: { opportunityId: ID },
     annotations: READ,
   }, async ({ opportunityId }) => run(() => yacrum.get(`/opportunities/${encodeURIComponent(opportunityId)}/context`))());

@@ -23,7 +23,9 @@ Call `whoami`.
      Say so, give `details.earliestSnapshot`, and continue with the rest.
 2. **`pipeline_summary`**, with `salesPersonId` for one rep: open opportunities by stage.
 3. **`forecast`**: this quarter's months. Cash appears only for Admin and Management.
-4. **`get_signals`** with the same scope and `types: ["deal.slipping", "deal.stale", "deal.no_next_step", "quote.expiring"]`:
+4. **`stage_readiness`** for each open opportunity in scope: the largest ten by amount when there are more.
+   It shows what is ready to advance and what is blocked by a stage gate.
+5. **`get_signals`** with the same scope and `types: ["deal.slipping", "deal.stale", "deal.no_next_step", "quote.expiring"]`:
    what needs attention.
 
 ## 3. Summarise in the chat
@@ -37,6 +39,10 @@ Call `whoami`.
 - **Sales Health:** the open opportunities marked R (off track) or Y (at risk), with each note. `list_opportunities`
   carries it as `status` and `statusDescription`. Name any whose health the week's changes now contradict, such
   as a G opportunity that slipped twice.
+- **Ready to advance:** each opportunity whose `readyFor` is set. Name the stage it can move to. Offer the move;
+  never make it unasked.
+- **Blocked by a gate:** each opportunity whose next stage has an unmet gate. Name what is missing (a scoring
+  answer, or a sent quote) and the action that would meet it.
 - **The forecast:** this month and next.
 
 ## 4. A shareable report
@@ -54,3 +60,6 @@ Propose these, and make each only when the user confirms:
 - **Sales Health:** `set_sales_health`, with the status and a one-line note together. Propose the new status
   and the note, and write it only when the user confirms. Never change it on your own reading alone.
 - **Stage moves:** `move_opportunity_stage`. Always confirm the stage by name first.
+- **Scoring:** for a blocked opportunity whose rep wants to work it through, suggest `/yacrum:qualify-opportunity`.
+- **A gate override** (`overrideReason`): only for an Admin or a Management user (`whoami`), and only with a
+  reason they give. Never for a Sales rep.
