@@ -145,7 +145,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
 
   server.registerTool('list_opportunities', {
     title: 'List opportunities',
-    description: 'Deals, optionally of one company or one sales person, and of some stage kinds (open, paused, won, lost).',
+    description: 'Deals, optionally of one company or one sales person, and of some stage kinds (open, paused, won, lost). Each carries its Sales Health as status (G on track, Y at risk, R off track; absent when not set) and statusDescription, its note.',
     inputSchema: {
       companyId: z.string().optional(),
       salesPersonId: z.string().optional(),
@@ -196,6 +196,19 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
     },
     annotations: UPDATES,
   }, async ({ opportunityId, ...fields }) => run(() => yacrum.patch(`/opportunities/${encodeURIComponent(opportunityId)}`, fields))());
+
+  server.registerTool('set_sales_health', {
+    title: 'Set an opportunity\'s Sales Health',
+    description: 'Set a deal\'s Sales Health — G on track, Y at risk, R off track — with a note saying why (Admin or Sales; a Sales Engineer on its deal team). The status and its note are always set together: a status with no reason is half an answer. Read the current one from deal_context (opportunity.status and statusDescription) first, and propose the change to the user before making it.',
+    inputSchema: {
+      opportunityId: ID,
+      status: z.enum(['G', 'Y', 'R']).describe('G on track, Y at risk, R off track'),
+      note: z.string().trim().min(1).max(500).describe('Why, in a sentence or two'),
+    },
+    annotations: UPDATES,
+  }, async ({ opportunityId, status, note }) => run(() => yacrum.patch(`/opportunities/${encodeURIComponent(opportunityId)}`, {
+    status, statusDescription: note,
+  }))());
 
   server.registerTool('move_opportunity_stage', {
     title: 'Move an opportunity to a stage',
@@ -273,7 +286,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
 
   server.registerTool('deal_context', {
     title: 'Deal context',
-    description: 'Everything about one deal in one read, to summarise it or draft to it: the deal, its company and contact, stage history, quotes, qualification, open action items, notes, recent activity, whether you may edit it, and consent: the CASL facts (the company\'s last purchase; each contact\'s country and last inquiry) for the primary contact and the quote\'s contact. Facts, never a verdict.',
+    description: 'Everything about one deal in one read, to summarise it or draft to it: the deal (with its Sales Health as status G/Y/R and statusDescription), its company and contact, stage history, quotes, qualification, open action items, notes, recent activity, whether you may edit it, and consent: the CASL facts (the company\'s last purchase; each contact\'s country and last inquiry) for the primary contact and the quote\'s contact. Facts, never a verdict.',
     inputSchema: { opportunityId: ID },
     annotations: READ,
   }, async ({ opportunityId }) => run(() => yacrum.get(`/opportunities/${encodeURIComponent(opportunityId)}/context`))());

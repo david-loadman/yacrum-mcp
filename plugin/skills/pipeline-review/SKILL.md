@@ -34,6 +34,9 @@ Call `whoami`.
 - **What moved:** advanced and regressed opportunities, and new ones.
 - **What slipped:** each close date, from then to now.
 - **Needs attention:** at most five items from the signals, each with the action it needs.
+- **Sales Health:** the open opportunities marked R (off track) or Y (at risk), with each note. `list_opportunities`
+  carries it as `status` and `statusDescription`. Name any whose health the week's changes now contradict, such
+  as a G opportunity that slipped twice.
 - **The forecast:** this month and next.
 
 ## 4. A shareable report
@@ -48,4 +51,6 @@ Propose these, and make each only when the user confirms:
   a next step on <opportunity>" and "Confirm the close date for <opportunity>".
 - **Opportunity updates:** `update_opportunity`, for example a new expected close date or probability the
   user gives you.
+- **Sales Health:** `set_sales_health`, with the status and a one-line note together. Propose the new status
+  and the note, and write it only when the user confirms. Never change it on your own reading alone.
 - **Stage moves:** `move_opportunity_stage`. Always confirm the stage by name first.

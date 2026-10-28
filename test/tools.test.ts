@@ -98,6 +98,20 @@ describe('the Yacrum MCP server', () => {
     expect(context).toMatchObject({ opportunity: { name: 'Pilot' }, canEdit: true });
   });
 
+  it('sets Sales Health with its note in one change, and refuses a status with no note', async () => {
+    yacrum = fakeYacrum({ 'PATCH /opportunities/o1': () => ({ body: { data: { id: 'o1', status: 'Y' } } }) });
+    const client = await connect(yacrum.fetcher);
+    const result = await client.callTool({ name: 'set_sales_health', arguments: { opportunityId: 'o1', status: 'Y', note: 'Champion left' } });
+    expect(result.isError).toBeFalsy();
+    expect(yacrum.calls).toHaveLength(1);
+    expect(yacrum.calls[0].method).toBe('PATCH');
+    expect(yacrum.calls[0].body).toEqual({ status: 'Y', statusDescription: 'Champion left' });
+
+    const noNote = await client.callTool({ name: 'set_sales_health', arguments: { opportunityId: 'o1', status: 'R', note: ' ' } });
+    expect(noNote.isError).toBe(true);
+    expect(yacrum.calls).toHaveLength(1);
+  });
+
   it('relays Yacrum’s refusal as a tool error the model can read', async () => {
     const client = await connect(yacrum.fetcher);
     const result = await client.callTool({ name: 'move_opportunity_stage', arguments: { opportunityId: 'o1', stageId: 's-lost' } });
@@ -172,12 +186,12 @@ describe('the signals, outreach, quote, action-item and pipeline-changes tools (
     for (const name of ['create_company', 'create_contact', 'create_opportunity', 'log_activity', 'create_action_item']) {
       expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: false }]);
     }
-    for (const name of ['update_opportunity', 'update_action_item', 'snooze_signal', 'unsnooze_signal']) {
+    for (const name of ['update_opportunity', 'set_sales_health', 'update_action_item', 'snooze_signal', 'unsnooze_signal']) {
       expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: false, idempotentHint: true }]);
     }
     expect(tools.move_opportunity_stage).toEqual({ readOnlyHint: false, destructiveHint: true });
     // Every tool is in one of the lists above: none is left unannotated.
-    expect(Object.keys(tools)).toHaveLength(reads.length + 5 + 4 + 1);
+    expect(Object.keys(tools)).toHaveLength(reads.length + 5 + 5 + 1);
   });
 });
 

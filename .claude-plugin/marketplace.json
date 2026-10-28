@@ -10,7 +10,7 @@
       "name": "yacrum",
       "source": "./plugin",
       "description": "Morning signals, re-engaging a deal, an account pulse before a meeting, and the weekly pipeline review, on your Yacrum data. Drafts go to your own mailbox; nothing is sent.",
-      "version": "0.2.2"
+      "version": "0.2.3"
     }
   ]
 }

@@ -34,7 +34,7 @@ Read these elsewhere:
 One page, in this order:
 - **Who:** the attendees and their roles, with the Yacrum contacts matched.
 - **Where things stand:**
-  - each open opportunity: its stage, amount, expected close and qualification tier
+  - each open opportunity: its stage, amount, expected close, qualification tier and Sales Health (G/Y/R and its note, from `deal_context`)
   - the latest quote and its status
   - the last activity, and when it was
 - **Open items:** the action items, with their owners and due dates.
@@ -47,3 +47,6 @@ One page, in this order:
 
 Offer `log_activity` on the company: "Pre-call brief: <meeting>", with the three questions. Do it only if
 the rep agrees.
+
+If what you found contradicts an opportunity's Sales Health, for example a G opportunity with a lost
+champion, propose a new status and its note. Write it with `set_sales_health` only if the rep agrees.
