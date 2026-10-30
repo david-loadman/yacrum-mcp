@@ -38,11 +38,25 @@ you were given another.
 
 ⚠️ The plugin runs the MCP server with `npx yacrum-mcp`, which needs Node.js 20 or later.
 
-### Claude Desktop
+### Claude Desktop and claude.ai
 
-Add the Yacrum marketplace in Claude's plugin settings, install **Yacrum**, and enter your key when asked.
-If your Claude Desktop does not take plugins, add the MCP server by hand as the [README](../README.md#claude-desktop)
-shows. The skills' instructions in `skills/` can then be used as prompts.
+⚠️ **A plugin installed with the `claude` command is Claude Code's alone.** Desktop and claude.ai keep plugins on
+your Claude account, so install it there as well. Plugins need a paid plan.
+
+1. Open **Customize** in the left sidebar, then the **Plugins** tab.
+2. Click **Add**, then **Add marketplace**, and enter `david-loadman/yacrum-mcp`.
+3. Install **Yacrum**, and enter your key when asked.
+
+What runs where:
+- **Chat:** the skills (`/yacrum:…`) load, but the plugin's MCP server does not: chat cannot start a local
+  server. Add the server by hand as well, as the [README](../README.md#claude-desktop) shows, so the skills have
+  their tools.
+- **Cowork:** everything loads, the server included. If you also added the server by hand, there are two; ask
+  *"who am I in Yacrum?"* to see which key is in use.
+
+⚠️ **Check that the plugin loaded.** Without it, Claude still answers `/yacrum:pipeline-review` from the tools
+alone, and the answer looks plausible but skips the skill's steps. In a new chat, ask *"which Yacrum skills do
+you have?"*. It should name them.
 
 ## 3. Connect your mailbox, so Claude can draft
 
