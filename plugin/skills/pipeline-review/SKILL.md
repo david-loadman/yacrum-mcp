@@ -15,6 +15,9 @@ Call `whoami`.
 
 ## 2. Read
 
+Make **all five** reads before writing anything. Don't skip one to save time: each feeds a section below, and a
+skipped read makes its section look empty when it isn't.
+
 1. **`pipeline_changes`** with that scope and since.
    - The outcomes are `new`, `advanced`, `regressed`, `won`, `lost`, `paused` and `removed`, plus the
      `slipped` and `amountChanged` flags.
@@ -29,6 +32,9 @@ Call `whoami`.
    what needs attention.
 
 ## 3. Summarise in the chat
+
+Give **every** section below, in this order, under its own heading. When a section has nothing in it, write
+"None this week": a section left out reads as nothing to report.
 
 - **The headline:** the pipeline then and now (count, amount and weighted), and the change. Keep each
   currency separate, or use the base figure, which converts both sides at today's rate.
