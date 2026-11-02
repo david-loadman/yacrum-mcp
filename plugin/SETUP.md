@@ -45,14 +45,13 @@ your Claude account, so install it there as well. Plugins need a paid plan.
 
 1. Open **Customize** in the left sidebar, then the **Plugins** tab.
 2. Click **Add**, then **Add marketplace**, and enter `david-loadman/yacrum-mcp`.
-3. Install **Yacrum**, and enter your key when asked.
+3. Install **Yacrum**. Desktop does not ask for a key.
+4. **Add the server by hand**, as the [README](../README.md#claude-desktop) shows, with your key and Yacrum's address.
 
-What runs where:
-- **Chat:** the skills (`/yacrum:…`) load, but the plugin's MCP server does not: chat cannot start a local
-  server. Add the server by hand as well, as the [README](../README.md#claude-desktop) shows, so the skills have
-  their tools.
-- **Cowork:** everything loads, the server included. If you also added the server by hand, there are two; ask
-  *"who am I in Yacrum?"* to see which key is in use.
+⚠️ **In Desktop the plugin brings the skills, not the tools.** Its own server needs the key and address that Claude
+Code asks for at install, and Desktop has nowhere to enter them, so it stays *not started*. The tools come from the
+server you added in step 4: keep it. To change which member Claude acts as, change the key there and restart Desktop.
+Ask *"who am I in Yacrum?"* to see which key is in use.
 
 ⚠️ **Check that the plugin loaded.** Without it, Claude still answers `/yacrum:pipeline-review` from the tools
 alone, and the answer looks plausible but skips the skill's steps. In a new chat, ask *"which Yacrum skills do
