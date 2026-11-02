@@ -1,7 +1,10 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { YacrumClient } from '../src/client.js';
 import { registerTools, summarisePipeline } from '../src/tools.js';
 
@@ -15,7 +18,7 @@ function fakeYacrum(routes: Record<string, (call: Call) => { status?: number; bo
     const url = new URL(String(input));
     const call: Call = {
       method: init?.method ?? 'GET', url, headers: init?.headers as Record<string, string>,
-      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      body: init?.body instanceof FormData ? init.body : init?.body ? JSON.parse(String(init.body)) : undefined,
     };
     calls.push(call);
     const route = routes[`${call.method} ${url.pathname.replace('/api/v1', '')}`];
@@ -25,9 +28,9 @@ function fakeYacrum(routes: Record<string, (call: Call) => { status?: number; bo
   return { calls, fetcher };
 }
 
-async function connect(fetcher: typeof fetch) {
+async function connect(fetcher: typeof fetch, importCallMs?: number) {
   const server = new McpServer({ name: 'yacrum', version: 'test' });
-  registerTools(server, new YacrumClient({ baseUrl: 'https://crm.example.com/', apiKey: KEY }, fetcher));
+  registerTools(server, new YacrumClient({ baseUrl: 'https://crm.example.com/', apiKey: KEY }, fetcher), importCallMs);
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   await server.connect(serverSide);
   const client = new Client({ name: 'test', version: '1' });
@@ -216,7 +219,8 @@ describe('the signals, outreach, quote, action-item and pipeline-changes tools (
     const tools = Object.fromEntries((await client.listTools()).tools.map((t) => [t.name, t.annotations ?? {}]));
     const reads = ['whoami', 'search', 'list_companies', 'get_company', 'list_company_types', 'list_contacts', 'list_opportunities',
       'get_pipeline', 'pipeline_summary', 'forecast', 'qualification_score', 'deal_context', 'get_signals', 'get_outreach_settings',
-      'list_quotes', 'get_quote', 'list_action_items', 'pipeline_changes', 'list_scoring_templates', 'stage_readiness'];
+      'list_quotes', 'get_quote', 'list_action_items', 'pipeline_changes', 'list_scoring_templates', 'stage_readiness',
+      'list_profiles', 'get_workspace_setup', 'get_import_templates', 'get_import_status'];
     for (const name of reads) expect([name, tools[name]]).toEqual([name, { readOnlyHint: true }]);
     for (const name of ['create_company', 'create_contact', 'create_opportunity', 'log_activity', 'create_action_item']) {
       expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: false }]);
@@ -224,11 +228,189 @@ describe('the signals, outreach, quote, action-item and pipeline-changes tools (
     for (const name of ['update_opportunity', 'set_sales_health', 'update_action_item', 'snooze_signal', 'unsnooze_signal']) {
       expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: false, idempotentHint: true }]);
     }
-    expect(tools.move_opportunity_stage).toEqual({ readOnlyHint: false, destructiveHint: true });
+    expect(tools.preview_import).toEqual({ readOnlyHint: false, destructiveHint: false });
+    expect(tools.set_workspace_features).toEqual({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
+    for (const name of ['move_opportunity_stage', 'apply_profile', 'import_records', 'undo_import']) {
+      expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: true }]);
+    }
     // ⚑ Scoring on another template deletes the old answers.
     expect(tools.score_opportunity).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     // Every tool is in one of the lists above: none is left unannotated.
-    expect(Object.keys(tools)).toHaveLength(reads.length + 5 + 5 + 1 + 1);
+    expect(Object.keys(tools)).toHaveLength(reads.length + 5 + 5 + 4 + 1 + 2);
+  });
+});
+
+describe('the setup and import tools (#405)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'yacrum-mcp-'));
+  const file = (name: string, content = 'name\nAcme\n') => { const path = join(dir, name); writeFileSync(path, content); return path; };
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  const ANSWERS = { summary: { id: 'i1', status: 'uploaded' }, next: 'answers', setup: { mapping: { stages: {} }, stageSuggestions: {} } };
+  const PREVIEW = { counts: { companies: 2 }, duplicates: [], held: [], canadianContacts: 1, suggestCasl: true };
+  const importRoutes = (overrides: Parameters<typeof fakeYacrum>[0] = {}) => fakeYacrum({
+    'POST /imports': () => ({ status: 201, body: { data: { id: 'i1', status: 'uploaded', unrecognised: ['notes.csv'] } } }),
+    'GET /imports/i1': () => ({ body: { data: ANSWERS } }),
+    'GET /imports/i1/preview': () => ({ body: { data: PREVIEW } }),
+    'POST /imports/i1/answers': () => ({ body: { data: { saved: ['mapping'] } } }),
+    ...overrides,
+  });
+  const NOTHING_SAVED = { status: 409, body: { error: { code: 'invalid_state', message: 'Save the answers first.' } } };
+
+  it('reads the setup, the Profiles and the templates, and shows or hides a feature', async () => {
+    const { calls, fetcher } = fakeYacrum({
+      'GET /profiles': () => ({ body: { data: [{ key: 'product_seller' }] } }),
+      'GET /workspace/setup': () => ({ body: { data: { onboarding: { status: 'not_started' } } } }),
+      'GET /imports/templates': () => ({ body: { data: { spreadsheet: [], exports: {} } } }),
+      'PATCH /workspace/features': () => ({ body: { data: { hidden: ['quotes'] } } }),
+    });
+    const client = await connect(fetcher);
+    expect(text(await client.callTool({ name: 'list_profiles', arguments: {} }))).toContain('product_seller');
+    expect(text(await client.callTool({ name: 'get_workspace_setup', arguments: {} }))).toContain('not_started');
+    expect(text(await client.callTool({ name: 'get_import_templates', arguments: {} }))).toContain('spreadsheet');
+    await client.callTool({ name: 'set_workspace_features', arguments: { quotes: false } });
+    expect(calls.at(-1)).toMatchObject({ method: 'PATCH', body: { quotes: false } });
+  });
+
+  it('will not apply a Profile unless dryRun is said, and sends what it was given', async () => {
+    const { calls, fetcher } = fakeYacrum({ 'POST /workspace/profile': () => ({ body: { data: { applied: false, defaulted: true } } }) });
+    const client = await connect(fetcher);
+    const refused = await client.callTool({ name: 'apply_profile', arguments: { profileKey: 'var_si', templateMode: 'install_default' } });
+    expect(refused.isError).toBe(true);
+    expect(calls).toHaveLength(0);
+
+    await client.callTool({ name: 'apply_profile', arguments: { profileKey: 'var_si', templateMode: 'install_default', dryRun: true, featureChanges: { casl: true } } });
+    expect(calls[0]).toMatchObject({ method: 'POST', body: { profileKey: 'var_si', dryRun: true, featureChanges: { casl: true } } });
+  });
+
+  it('uploads the files as multipart with the source, and says what is asked next', async () => {
+    const { calls, fetcher } = importRoutes({ 'GET /imports/i1/preview': () => NOTHING_SAVED });
+    const client = await connect(fetcher);
+    const result = await client.callTool({ name: 'preview_import', arguments: { files: [file('deals.csv', 'id,name\n1,Big\n')], source: 'hubspot' } });
+    const form = calls[0].body as FormData;
+    expect(calls[0].url.pathname).toBe('/api/v1/imports');
+    expect(calls[0].headers['content-type']).toBeUndefined();
+    expect(form.get('source')).toBe('hubspot');
+    const sent = form.getAll('files') as File[];
+    expect(sent.map((f) => f.name)).toEqual(['deals.csv']);
+    expect(await sent[0].text()).toBe('id,name\n1,Big\n');
+    expect(JSON.parse(text(result))).toMatchObject({ id: 'i1', next: 'answers', unrecognised: ['notes.csv'], preview: null, previewNote: 'Save the answers first.' });
+  });
+
+  it('refuses a file it should not read before anything is read or sent', async () => {
+    const { calls, fetcher } = importRoutes();
+    const client = await connect(fetcher);
+    const secret = file('id_rsa', 'PRIVATE');
+    const link = join(dir, 'looks-fine.csv');
+    symlinkSync(secret, link);
+    const big = file('big.csv');
+    truncateSync(big, 10 * 1024 * 1024 + 1);
+    const parts = ['a', 'b', 'c'].map((n) => { const path = file(`${n}.csv`); truncateSync(path, 9 * 1024 * 1024); return path; });
+
+    const refusals: Array<[string[], string]> = [
+      [[secret], 'not an Excel'],
+      [[link], 'not a regular file'],
+      [[file('old.xls')], 'not an Excel'],
+      [['deals.csv'], 'not a full path'],
+      [[join(dir, 'missing.csv')], 'not found'],
+      [[big], 'larger than 10 MB'],
+      [parts, 'larger than 25 MB'],
+      [Array.from({ length: 13 }, () => file('one.csv')), 'at most 12'],
+    ];
+    for (const [files, why] of refusals) {
+      const result = await client.callTool({ name: 'preview_import', arguments: { files, source: 'spreadsheet' } });
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain(`Nothing was sent to Yacrum: `);
+      expect(text(result)).toContain(why);
+      expect(text(result)).not.toContain('PRIVATE');
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it('needs a source with files, and files or an import', async () => {
+    const { calls, fetcher } = importRoutes();
+    const client = await connect(fetcher);
+    expect((await client.callTool({ name: 'preview_import', arguments: { files: [file('a.csv')] } })).isError).toBe(true);
+    expect((await client.callTool({ name: 'preview_import', arguments: {} })).isError).toBe(true);
+    expect((await client.callTool({ name: 'preview_import', arguments: { files: [file('a.csv')], source: 'hubspot', importId: 'i1' } })).isError).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('saves the answers, then previews them', async () => {
+    const { calls, fetcher } = importRoutes();
+    const client = await connect(fetcher);
+    const mapping = { stages: { Lead: 's1' }, duplicates: { g1: true } };
+    const result = await client.callTool({ name: 'preview_import', arguments: { importId: 'i1', mapping } });
+    expect(calls[0]).toMatchObject({ method: 'POST', body: { mapping } });
+    expect(calls[0].url.pathname).toBe('/api/v1/imports/i1/answers');
+    expect(JSON.parse(text(result)).preview).toEqual(PREVIEW);
+  });
+
+  it('passes on what is wrong with the answers, and answers that have gone stale', async () => {
+    const refused = importRoutes({ 'POST /imports/i1/answers': () => ({ status: 400, body: { error: { code: 'validation_error', message: 'These answers need changing.', details: { problems: ['No such stage'] } } } }) });
+    const failed = await (await connect(refused.fetcher)).callTool({ name: 'preview_import', arguments: { importId: 'i1', mapping: {} } });
+    expect(failed.isError).toBe(true);
+    expect(text(failed)).toContain('No such stage');
+
+    const stale = importRoutes({ 'GET /imports/i1/preview': () => ({ status: 409, body: { error: { code: 'invalid_state', message: 'These answers need changing.', details: { problems: ['A stage has gone'] } } } }) });
+    const view = JSON.parse(text(await (await connect(stale.fetcher)).callTool({ name: 'preview_import', arguments: { importId: 'i1' } })));
+    expect(view).toMatchObject({ preview: null, previewProblems: { problems: ['A stage has gone'] } });
+  });
+
+  it('does not preview an import past its answers', async () => {
+    const { calls, fetcher } = importRoutes({ 'GET /imports/i1': () => ({ body: { data: { summary: {}, next: 'none', totals: { done: 2 } } } }) });
+    const view = JSON.parse(text(await (await connect(fetcher)).callTool({ name: 'preview_import', arguments: { importId: 'i1' } })));
+    expect(view.next).toBe('none');
+    expect(calls.map((c) => c.url.pathname)).toEqual(['/api/v1/imports/i1']);
+  });
+
+  it('runs an import until it finishes', async () => {
+    const answers = ['running', 'running', 'completed'];
+    const { calls, fetcher } = importRoutes({ 'POST /imports/i1/run': () => ({ body: { data: { status: answers.shift(), total: 3, done: 3, failed: 0 } } }) });
+    const view = JSON.parse(text(await (await connect(fetcher)).callTool({ name: 'import_records', arguments: { importId: 'i1' } })));
+    expect(calls).toHaveLength(3);
+    expect(view).toMatchObject({ status: 'completed', done: 3, more: false });
+  });
+
+  it('hands back an import still running once its time is up, and passes on a refusal', async () => {
+    const running = importRoutes({ 'POST /imports/i1/run': () => ({ body: { data: { status: 'running', total: 9, done: 1, failed: 0 } } }) });
+    const view = JSON.parse(text(await (await connect(running.fetcher, 0)).callTool({ name: 'import_records', arguments: { importId: 'i1' } })));
+    expect(running.calls).toHaveLength(1);
+    expect(view).toMatchObject({ status: 'running', more: true });
+
+    const limited = importRoutes({ 'POST /imports/i1/run': () => ({ status: 429, body: { error: { code: 'plan_limit', message: 'The month is used up.' } } }) });
+    const refused = await (await connect(limited.fetcher)).callTool({ name: 'import_records', arguments: { importId: 'i1' } });
+    expect(refused.isError).toBe(true);
+    expect(text(refused)).toContain('plan_limit');
+  });
+
+  it('reads an import’s status, and undoes it or says what stands in the way', async () => {
+    const { calls, fetcher } = importRoutes({ 'POST /imports/i1/undo': () => ({ status: 409, body: { error: { code: 'invalid_state', message: 'A contact hangs off it.' } } }) });
+    const client = await connect(fetcher);
+    expect(JSON.parse(text(await client.callTool({ name: 'get_import_status', arguments: { importId: 'i1' } }))).next).toBe('answers');
+    const refused = await client.callTool({ name: 'undo_import', arguments: { importId: 'i1' } });
+    expect(refused.isError).toBe(true);
+    expect(text(refused)).toContain('A contact hangs off it');
+    expect(calls.at(-1)?.method).toBe('POST');
+  });
+
+  it('never echoes the key, whether Yacrum answers or refuses', async () => {
+    const answering = importRoutes({
+      'GET /profiles': () => ({ body: { data: [] } }), 'GET /workspace/setup': () => ({ body: { data: {} } }),
+      'POST /workspace/profile': () => ({ body: { data: {} } }), 'PATCH /workspace/features': () => ({ body: { data: {} } }),
+      'GET /imports/templates': () => ({ body: { data: {} } }), 'POST /imports/i1/run': () => ({ body: { data: { status: 'completed' } } }),
+      'POST /imports/i1/undo': () => ({ body: { data: {} } }),
+    });
+    const refusing = fakeYacrum({});
+    for (const fetcher of [answering.fetcher, refusing.fetcher]) {
+      const client = await connect(fetcher);
+      const profile = { profileKey: 'var_si', templateMode: 'keep_current', dryRun: true };
+      const calls: Array<[string, Record<string, unknown>]> = [
+        ['list_profiles', {}], ['get_workspace_setup', {}], ['apply_profile', profile], ['set_workspace_features', { casl: true }],
+        ['get_import_templates', {}], ['preview_import', { files: [file('a.csv')], source: 'hubspot' }], ['preview_import', { importId: 'i1' }],
+        ['import_records', { importId: 'i1' }], ['get_import_status', { importId: 'i1' }], ['undo_import', { importId: 'i1' }],
+      ];
+      for (const [name, args] of calls) expect(JSON.stringify(await client.callTool({ name, arguments: args }))).not.toContain(KEY);
+    }
   });
 });
 

@@ -9,6 +9,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { YacrumApiError, type YacrumClient } from './client.js';
+import { importForm, NotSentError } from './import-files.js';
 
 type Json = unknown;
 type Result = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
@@ -19,6 +20,8 @@ const ok = (data: Json): Result => ({ content: [{ type: 'text', text: JSON.strin
 const failed = (error: unknown): Result => {
   const text = error instanceof YacrumApiError
     ? `Yacrum refused (${error.status} ${error.code}): ${error.message}${error.details ? `\n${JSON.stringify(error.details)}` : ''}`
+    : error instanceof NotSentError
+    ? `Nothing was sent to Yacrum: ${error.message}`
     : `The request to Yacrum failed: ${error instanceof Error ? error.message : String(error)}`;
   return { content: [{ type: 'text', text }], isError: true };
 };
@@ -54,10 +57,13 @@ const SIGNAL_TYPES = [
   'deal.lost_revisit', 'deal.paused_revisit', 'account.dormant', 'account.renewal', 'contact.referral',
 ] as const;
 
+/** One tool call of `import_records` stops starting parts after this, inside a client's tool timeout. A part takes up to about 8 seconds. */
+const IMPORT_CALL_MS = 45_000;
+
 const ID = z.string().min(1);
 const DAY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
 
-export function registerTools(server: McpServer, yacrum: YacrumClient): void {
+export function registerTools(server: McpServer, yacrum: YacrumClient, importCallMs = IMPORT_CALL_MS): void {
   const me = () => yacrum.get<Me>('/me');
 
   server.registerTool('whoami', {
@@ -294,7 +300,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
 
   server.registerTool('list_scoring_templates', {
     title: 'Scoring templates',
-    description: 'The workspace\'s scoring templates, the default first: each question (by id) with its kind — scale, answered 1 to 10, or select, answered with one of its options by id — its weight and guidance, the tiers, the most the template can score, and the stage gate a question is (the stage, and the minimum or the passing options). Read it before score_opportunity.',
+    description: 'The workspace\'s scoring templates, the default first: each question (by id) with its kind — scale, answered 1 to 10, or select, answered with one of its options by id — its weight and guidance, the tiers, the most the template can score, and the stage gate a question is (the stage, and the minimum or the passing options). A gate with enabled false is only suggested and holds nobody to anything: never call it required. Read it before score_opportunity.',
     inputSchema: {},
     annotations: READ,
   }, async () => run(() => yacrum.get('/scoring-templates'))());
@@ -335,7 +341,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
       + 'deal.stale — an open opportunity with no activity for 14 days or more. '
       + 'deal.slipping — an open opportunity whose expected close date has passed. '
       + 'deal.no_next_step — an open opportunity with no open action item. '
-      + 'quote.quiet — a quote sent 7 days or more ago with nothing on its opportunity since. '
+      + 'quote.quiet — a quote sent 7 days or more ago with nothing on its opportunity since; when record.kind is opportunity it is the deal\'s quote attachment (evidence.attachment, evidence.sentOn), which has no quote id, expiry or contact of its own. '
       + 'quote.expiring — a sent quote expiring within 7 days, or expired in the last 14, on an opportunity not yet closed. '
       + 'deal.lost_revisit — an opportunity lost 6 to 18 months ago, with nothing new opened at its company since. '
       + 'deal.paused_revisit — an opportunity paused 60 days or more ago. '
@@ -429,6 +435,111 @@ export function registerTools(server: McpServer, yacrum: YacrumClient): void {
     },
     annotations: READ,
   }, async ({ since, scope, salesPersonId }) => run(() => yacrum.get('/pipeline/changes', { since, scope, salesPersonId }))());
+
+  server.registerTool('list_profiles', {
+    title: 'List the Profiles',
+    description: 'The seven Profiles a workspace can apply: each one\'s stages, scoring template and feature defaults. Admin, with a write key.',
+    annotations: READ,
+  }, run(() => yacrum.get('/profiles')));
+
+  server.registerTool('get_workspace_setup', {
+    title: 'How far the workspace is set up',
+    description: 'The workspace\'s Profile, stages, default template, hidden features, onboarding status and record counts. Admin, with a write key.',
+    annotations: READ,
+  }, run(() => yacrum.get('/workspace/setup')));
+
+  server.registerTool('apply_profile', {
+    title: 'Apply a Profile',
+    description: 'Apply a Profile to the workspace, or with dryRun true see what it would do and change nothing. Both answer with the same diff: the stages, the opportunities that move, the gates turned off and the feature changes. '
+      + 'Always dry-run first, show the user the diff, and apply only after an explicit yes, sending the same inputs with the diff\'s stageMap and dryRun false: a real apply needs a complete map. Opportunities keep their probability and time in stage, and no automation, webhook or mail fires. Admin, with a write key.',
+    inputSchema: {
+      profileKey: z.string().min(1).max(60).describe('A key from list_profiles'),
+      dryRun: z.boolean().describe('true: change nothing and answer with the diff. false: apply it. Never false before the user has said yes to the diff'),
+      templateMode: z.enum(['install_default', 'keep_current']).describe('install_default: the Profile\'s template becomes the default. keep_current: the current default stays. A template is never deleted'),
+      stageMap: z.record(z.string(), z.number().int().positive()).optional().describe('Each open stage\'s id to a Profile stage\'s position. Absent on a dry run: the by-position default is suggested'),
+      stageNames: z.record(z.string(), z.string().trim().min(1).max(60)).optional().describe('Renames of the Profile\'s stages, by position'),
+      featureChanges: z.object({ quotes: z.boolean(), forecast: z.boolean(), deal_team: z.boolean(), casl: z.boolean() }).partial().strict().optional().describe('Each true for shown, false for hidden. Anything absent stays as it is'),
+    },
+    annotations: CONSEQUENTIAL,
+  }, async (input) => run(() => yacrum.post('/workspace/profile', input))());
+
+  server.registerTool('set_workspace_features', {
+    title: 'Show or hide features',
+    description: 'Show or hide quotes, forecast, deal_team and casl for the workspace, each true for shown. Hiding only hides: it authorizes nothing and removes nothing. Say what will change and get a yes first. Admin, with a write key.',
+    inputSchema: { quotes: z.boolean().optional(), forecast: z.boolean().optional(), deal_team: z.boolean().optional(), casl: z.boolean().optional() },
+    annotations: UPDATES,
+  }, async (features) => run(() => yacrum.patch('/workspace/features', features))());
+
+  server.registerTool('get_import_templates', {
+    title: 'Import templates',
+    description: 'The spreadsheet templates, each column with what it needs and its CSV, and what each CRM\'s export looks like and how to make one. Admin, with a write key.',
+    annotations: READ,
+  }, run(() => yacrum.get('/imports/templates')));
+
+  /** Where an import has got and, while it can still be answered, what it would do. */
+  const importView = async (id: string) => {
+    const status = await yacrum.get<{ next: string }>(`/imports/${encodeURIComponent(id)}`);
+    if (status.next !== 'answers') return { id, ...status };
+    try {
+      return { id, ...status, preview: await yacrum.get(`/imports/${encodeURIComponent(id)}/preview`) };
+    } catch (error) {
+      // ⚑ 409: no answers saved yet, or saved answers the workspace has since outgrown. Not a failure: the setup says what to answer.
+      if (!(error instanceof YacrumApiError) || error.status !== 409) throw error;
+      return { id, ...status, preview: null, previewNote: error.message, ...(error.details ? { previewProblems: error.details } : {}) };
+    }
+  };
+
+  server.registerTool('preview_import', {
+    title: 'Upload and preview an import',
+    description: 'Every step of an import before it runs, and none of them reaches the workspace\'s records. Start with files and source: it uploads them. Then send importId with what the answer asks for: next columns (a spreadsheet) wants columns; next answers wants mapping, the setup.mapping it returned with the answers changed. Each call returns where the import has got, and the preview once answers are saved: counts, duplicates, held rows with reasons, warnings and canadianContacts. '
+      + 'stageSuggestions are never applied unless sent back in mapping.stages. A duplicate group is decided in mapping.duplicates only by the user. Files are read from this computer: full paths to .csv or .xlsx files only, at most 12, 10 MB each and 25 MB together. Admin, with a write key.',
+    inputSchema: {
+      files: z.array(z.string().min(1)).min(1).optional().describe('Full paths on this computer, to start an import'),
+      source: z.enum(['pipedrive', 'hubspot', 'spreadsheet']).optional().describe('With files: what they are, as the user confirmed'),
+      importId: z.string().min(1).optional().describe('The import to go on with'),
+      columns: z.array(z.object({ fileName: z.string(), kind: z.string(), columns: z.record(z.string(), z.string()) })).optional().describe('A spreadsheet\'s files: each column by header to a field id. Saving these clears the mapping'),
+      mapping: z.record(z.string(), z.unknown()).optional().describe('The whole of setup.mapping, with the user\'s answers in it'),
+    },
+    annotations: ADDS,
+  }, async ({ files, source, importId, columns, mapping }) => run(async () => {
+    if (files) {
+      if (!source) throw new NotSentError('Say what the files are: source is pipedrive, hubspot or spreadsheet.');
+      if (importId || columns || mapping) throw new NotSentError('Upload the files first, then send the answers with the importId it returns.');
+      const { id, unrecognised } = await yacrum.upload<{ id: string; unrecognised: string[] }>('/imports', await importForm(source, files));
+      return { ...(await importView(id)), unrecognised };
+    }
+    if (!importId) throw new NotSentError('Send files and source to start an import, or importId to go on with one.');
+    if (columns || mapping) await yacrum.post(`/imports/${encodeURIComponent(importId)}/answers`, { ...(columns && { columns }), ...(mapping && { mapping }) });
+    return importView(importId);
+  })());
+
+  server.registerTool('import_records', {
+    title: 'Run an import',
+    description: 'Write an import into the workspace. Only after the user has seen the preview and said yes. Each call works for up to about 45 seconds and returns status, total, done and failed: while more is true, call it again with the same importId. Safe to repeat. Admin, with a write key.',
+    inputSchema: { importId: ID },
+    annotations: CONSEQUENTIAL,
+  }, async ({ importId }) => run(async () => {
+    const started = Date.now();
+    let progress: { status: string };
+    do {
+      progress = await yacrum.post<{ status: string }>(`/imports/${encodeURIComponent(importId)}/run`);
+    } while (progress.status === 'running' && Date.now() - started < importCallMs);
+    return { importId, ...progress, more: progress.status === 'running' };
+  })());
+
+  server.registerTool('get_import_status', {
+    title: 'Where an import has got',
+    description: 'An import\'s status, what it still asks (next: columns, answers, run or none) and its totals. Admin, with a write key.',
+    inputSchema: { importId: ID },
+    annotations: READ,
+  }, async ({ importId }) => run(() => yacrum.get(`/imports/${encodeURIComponent(importId)}`))());
+
+  server.registerTool('undo_import', {
+    title: 'Undo an import',
+    description: 'Undo an import, all of it or none: what it created is deleted and what it filled in is cleared. Refused with 409, naming them, while records made since hang off it. Say what will go and get a yes first. Admin, with a write key.',
+    inputSchema: { importId: ID },
+    annotations: CONSEQUENTIAL,
+  }, async ({ importId }) => run(() => yacrum.post(`/imports/${encodeURIComponent(importId)}/undo`))());
 
   server.registerPrompt('summarize_deal', {
     title: 'Summarise a deal',
