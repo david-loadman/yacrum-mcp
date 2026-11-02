@@ -34,14 +34,23 @@ export class YacrumClient {
     for (const [key, value] of Object.entries(options.query ?? {})) if (value !== undefined && value !== '') url.searchParams.set(key, value);
     const response = await this.fetcher(url, {
       method,
-      headers: {
-        authorization: `Bearer ${this.config.apiKey}`,
-        accept: 'application/json',
-        ...(options.body !== undefined && { 'content-type': 'application/json' }),
-        'user-agent': 'yacrum-mcp',
-      },
+      headers: this.headers(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
       ...(options.body !== undefined && { body: JSON.stringify(options.body) }),
     });
+    return this.answer<T>(response);
+  }
+
+  /** The one route that is not JSON in: `fetch` sets the multipart boundary from the form. */
+  async upload<T>(path: string, form: FormData): Promise<T> {
+    const response = await this.fetcher(new URL(this.base + path), { method: 'POST', headers: this.headers(), body: form });
+    return this.answer<T>(response);
+  }
+
+  private headers(extra: Record<string, string> = {}): Record<string, string> {
+    return { authorization: `Bearer ${this.config.apiKey}`, accept: 'application/json', ...extra, 'user-agent': 'yacrum-mcp' };
+  }
+
+  private async answer<T>(response: Response): Promise<T> {
     const json = (await response.json().catch(() => null)) as { data?: T; error?: { code: string; message: string; details?: unknown } } | null;
     if (!response.ok || !json || json.error) {
       throw new YacrumApiError(response.status, json?.error?.code ?? 'http_error', json?.error?.message ?? `Yacrum answered ${response.status}.`, json?.error?.details);
@@ -53,7 +62,7 @@ export class YacrumClient {
     return this.request<T>('GET', path, { query });
   }
 
-  post<T>(path: string, body: unknown) {
+  post<T>(path: string, body?: unknown) {
     return this.request<T>('POST', path, { body });
   }
 

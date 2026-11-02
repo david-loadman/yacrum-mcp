@@ -68,6 +68,12 @@ claude mcp add yacrum --env YACRUM_API_KEY=yk_your_key_here -- npx -y yacrum-mcp
 | `score_opportunity` | Score a deal, or change its answers or template (switching template deletes the old answers) |
 | `stage_readiness` | The stage gates ahead of a deal, met or not, and the next stage when all of its gates are met |
 | `deal_context` | Everything about one deal in one read, to summarise it or draft to it, with the CASL consent facts for its contacts |
+| `list_profiles`, `get_workspace_setup` | The seven Profiles, and how far the workspace is set up (Admin) |
+| `apply_profile` | Apply a Profile. `dryRun` is required: `true` answers with the diff and changes nothing (Admin) |
+| `set_workspace_features` | Show or hide Quotes, Forecast, Deal team and CASL. Hiding authorizes nothing (Admin) |
+| `get_import_templates` | The spreadsheet templates, and what each CRM's export looks like (Admin) |
+| `preview_import` | Upload an export or spreadsheet from this computer, save the answers, and see what the import would do. Nothing reaches the workspace's records (Admin) |
+| `import_records`, `get_import_status`, `undo_import` | Run an import (call again while `more` is true), see where it has got, and undo it, all or none (Admin) |
 
 There is also a **`summarize_deal`** prompt that reads a deal's context and asks for a summary and next steps.
 
@@ -76,10 +82,15 @@ Every tool says what it does, so your AI client can ask before a write:
 | Kind | Tools | Annotations |
 |---|---|---|
 | Reads | `whoami`, `search`, every `list_…` and `get_…`, `pipeline_summary`, `forecast`, `qualification_score`, `deal_context`, `pipeline_changes`, `stage_readiness` | read only |
-| Additions | `create_company`, `create_contact`, `create_opportunity`, `create_action_item`, `log_activity` | not destructive |
-| Updates | `update_opportunity`, `set_sales_health`, `update_action_item`, `snooze_signal`, `unsnooze_signal` | not destructive, idempotent |
+| Additions | `create_company`, `create_contact`, `create_opportunity`, `create_action_item`, `log_activity`, `preview_import` | not destructive |
+| Updates | `update_opportunity`, `set_sales_health`, `update_action_item`, `snooze_signal`, `unsnooze_signal`, `set_workspace_features` | not destructive, idempotent |
 | A stage move | `move_opportunity_stage` | **destructive**: a lost or paused stage records a reason and changes the forecast. A stage gate can refuse it (409 `stage_gate`); an Admin or Management member may override it with `overrideReason` |
 | Scoring | `score_opportunity` | **destructive**, idempotent: switching a scored deal's template deletes its answers |
+| Setup and imports | `apply_profile`, `import_records`, `undo_import` | **destructive**: each changes the workspace's stages or many records at once. Show the diff or preview and get a yes first |
+
+**Files for an import are read from your computer.** `preview_import` takes full paths and reads only regular `.csv`
+and `.xlsx` files, never through a symlink, at most 12 files, 10 MB each and 25 MB together. Anything else is refused
+before a byte is read or sent.
 
 Yacrum never sends email. To draft outreach, pair this server with your own Gmail or Microsoft 365
 connector: draft in your mailbox with the BCC from `get_outreach_settings`, and log it with `log_activity`.
@@ -101,6 +112,7 @@ Setup, including the Gmail and Microsoft 365 connectors and email logging, is in
 ## Limits
 
 Every call counts against your workspace plan's monthly API calls. One key may make 120 requests a minute.
+An import uses about one call per 200 records.
 When a limit is reached, Yacrum's refusal says so, and the server passes it on to the AI as a tool error.
 
 ## Releasing
