@@ -9,8 +9,8 @@
     {
       "name": "yacrum",
       "source": "./plugin",
-      "description": "Morning signals, re-engaging a deal, an account pulse before a meeting, the weekly pipeline review, and qualifying an opportunity, on your Yacrum data. Drafts go to your own mailbox; nothing is sent.",
-      "version": "0.3.1"
+      "description": "Morning signals, re-engaging a deal, an account pulse before a meeting, the weekly pipeline review, and qualifying an opportunity, on your Yacrum data. Setting up a workspace and importing into it, for Admins. Drafts go to your own mailbox; nothing is sent.",
+      "version": "0.4.0"
     }
   ]
 }

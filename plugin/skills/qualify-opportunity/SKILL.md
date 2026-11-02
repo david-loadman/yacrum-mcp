@@ -29,8 +29,10 @@ Go category by category, in the template's order. For each question:
 - **Propose an answer:** for a scale question a number from 1 to 10; for a select question one of its options,
   named by its label. Give the evidence in one line, such as "the 14 Oct note says budget is approved by the CFO".
   - If there is no evidence, say so and ask the rep. Never guess a high answer to clear a gate.
-- **If the question is a stage gate**, say so: "required to enter Qualified: at least 7". Say whether your
-  proposed answer passes.
+- **If the question has a stage gate with `enabled` true**, say so: "required to enter Qualified: at least 7". Say
+  whether your proposed answer passes.
+  - **With `enabled` false, the gate is only suggested** and holds nobody to anything. Don't call it required. Mention
+    it only as a suggestion, or not at all.
 - **Keep the pace brisk.** Group the questions you have good evidence for and ask the rep to confirm them
   together. Ask about the rest one at a time.
 

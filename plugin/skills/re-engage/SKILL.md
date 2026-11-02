@@ -29,8 +29,11 @@ Also call `get_outreach_settings` for the style guide. Its BCC address is read a
 From this, work out:
 - **What happened:**
   - Lost: the reason and the competitor.
-  - Paused: the pause reason and when it paused.
-  - Quiet quote: when it was sent and whether it has expired.
+  - Paused: the pause reason and when it paused. A stage history reason of `profile_change` means a Profile change
+    moved the deal, not that someone gave that reason: look to the row that entered the paused stage for why.
+  - Quiet quote: when it was sent and whether it has expired. A signal whose `record.kind` is `opportunity` is the
+    deal's quote attachment: `evidence.sentOn` and `evidence.attachment` say what was sent. It has no quote to read,
+    no expiry and no contact of its own, so write to the primary contact.
 - **What has changed since:** time passed, new notes, news about the company. Use web search for news when
   it would help.
 - **Who to write to:** usually the primary contact, or the quote's contact for a quote. Choose someone else
