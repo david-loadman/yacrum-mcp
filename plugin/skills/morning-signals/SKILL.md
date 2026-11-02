@@ -34,7 +34,8 @@ Pick **at most 7** for today. For the team view, group them by `owner`.
 ## 4. Present them
 
 For each item, give:
-- **Title:** the company and the opportunity or quote, with the amount in its own currency.
+- **Title:** the company and the opportunity or quote, with the amount in its own currency. A `quote.quiet` whose
+  `record.kind` is `opportunity` is the deal's quote attachment, so call it that and never look it up with `get_quote`.
 - **Why now:** the `reason`, and one sentence of your own judgment.
 - **The move:** the suggested action in your words.
 - **For a Canadian contact:** the consent facts when the signal's `evidence` carries them. Every draft shows them

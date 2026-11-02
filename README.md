@@ -97,9 +97,13 @@ connector: draft in your mailbox with the BCC from `get_outreach_settings`, and 
 
 ## The Claude plugin
 
-[`plugin/`](./plugin) packages this server with four sales routines: morning signals, re-engaging a deal,
-an account pulse before a meeting, and the weekly pipeline review. Outreach is drafted in your own mailbox
-with your workspace's logging address in BCC. Nothing is sent.
+[`plugin/`](./plugin) packages this server with five sales routines: morning signals, re-engaging a deal,
+an account pulse before a meeting, the weekly pipeline review and qualifying an opportunity. Outreach is drafted
+in your own mailbox with your workspace's logging address in BCC. Nothing is sent.
+
+It also has two for an Admin: `/yacrum:setup` interviews you, shows a Profile's diff and applies it once you agree,
+and `/yacrum:import` brings in a Pipedrive or HubSpot export or a spreadsheet. Both need an Admin's write key and a
+local server, so they work in Claude Code and Claude Desktop, and not on claude.ai on the web.
 
 ```bash
 claude plugin marketplace add david-loadman/yacrum-mcp
