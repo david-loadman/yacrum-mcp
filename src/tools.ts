@@ -278,6 +278,59 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
     annotations: READ,
   }, run(() => yacrum.get('/pipeline')));
 
+  // ── The workspace's open stages (david-loadman/yacrum#471) ─────────────────
+  const STAGE_FIELDS = {
+    defaultProbability: z.number().int().min(0).max(100).nullable().optional().describe('The probability a new opportunity in it starts with, 0 to 100'),
+    helpText: z.string().max(300).nullable().optional().describe('What the stage means, shown on hover'),
+  };
+
+  server.registerTool('add_stage', {
+    title: 'Add a pipeline stage',
+    description: 'Add an open stage to the workspace\'s pipeline, after the open ones, or at position (1 is first) when given. '
+      + 'A pipeline has 3 to 10 open stages, each name once; Paused, Won and Lost are fixed. Say the stage and where it goes, and get a yes first. Admin, with a write key.',
+    inputSchema: {
+      name: z.string().trim().min(1).max(60),
+      ...STAGE_FIELDS,
+      position: z.number().int().positive().optional().describe('Where among the open stages, 1 for first. Absent: last'),
+    },
+    annotations: ADDS,
+  }, async ({ position, ...stage }) => run(async () => {
+    const { id } = await yacrum.post<{ id: string }>('/pipeline/stages', stage);
+    if (position === undefined) return { id };
+    const open = (await yacrum.get<{ stages: Stage[] }>('/pipeline')).stages.filter((s) => s.kind === 'open').map((s) => s.id);
+    const others = open.filter((s) => s !== id);
+    const stageIds = [...others.slice(0, position - 1), id, ...others.slice(position - 1)];
+    await yacrum.put('/pipeline/stages/order', { stageIds });
+    return { id, position: stageIds.indexOf(id) + 1 };
+  })());
+
+  server.registerTool('update_stage', {
+    title: 'Change a pipeline stage',
+    description: 'Rename a stage, or change its help text, default probability or whether it needs a sent quote. Paused, Won and Lost may be renamed only. Admin, with a write key.',
+    inputSchema: {
+      stageId: ID.describe('From get_pipeline'),
+      name: z.string().trim().min(1).max(60).optional(),
+      ...STAGE_FIELDS,
+      requiresSentQuote: z.boolean().optional().describe('An opportunity cannot move into it without a sent quote'),
+    },
+    annotations: UPDATES,
+  }, async ({ stageId, ...change }) => run(() => yacrum.patch(`/pipeline/stages/${encodeURIComponent(stageId)}`, change))());
+
+  server.registerTool('reorder_stages', {
+    title: 'Reorder the pipeline',
+    description: 'Put the open stages in a new order: every open stage\'s id from get_pipeline, once each. Admin, with a write key.',
+    inputSchema: { stageIds: z.array(ID).min(1).describe('Every open stage, in the new order') },
+    annotations: UPDATES,
+  }, async ({ stageIds }) => run(() => yacrum.put('/pipeline/stages/order', { stageIds }))());
+
+  server.registerTool('delete_stage', {
+    title: 'Remove a pipeline stage',
+    description: 'Remove an open stage. Yacrum refuses while an opportunity is in it, a scoring gate names it, or it would leave fewer than three: relay the refusal. '
+      + 'Name the stage and get an explicit yes first. Admin, with a write key.',
+    inputSchema: { stageId: ID.describe('From get_pipeline') },
+    annotations: CONSEQUENTIAL,
+  }, async ({ stageId }) => run(() => yacrum.delete(`/pipeline/stages/${encodeURIComponent(stageId)}`))());
+
   server.registerTool('pipeline_summary', {
     title: 'Pipeline summary',
     description: 'Open deals by stage: how many and how much, in each currency, and the probability-weighted total. Optionally one sales person\'s.',
@@ -304,6 +357,100 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
     inputSchema: {},
     annotations: READ,
   }, async () => run(() => yacrum.get('/scoring-templates'))());
+
+  // ── Writing scoring templates whole (david-loadman/yacrum#471, D249) ───────
+  const OPTION = z.object({
+    label: z.string().min(1).max(80), score: z.number().min(-1000).max(1000),
+    passesGate: z.boolean().optional().describe('This choice meets the question\'s gate'),
+  });
+  const QUESTION = z.object({
+    label: z.string().min(1).max(200),
+    kind: z.enum(['scale', 'select']).describe('scale: answered 1 to 10. select: one of its options'),
+    weight: z.number().min(0).max(100).describe('Points per answer point: a scale answer of 10 with weight 1 scores 10'),
+    helpText: z.string().max(500).optional().describe('Guidance shown with the question'),
+    options: z.array(OPTION).optional().describe('A select question\'s choices, two or more; none on a scale'),
+    gate: z.object({
+      stageId: z.string().min(1).describe('An open or won stage from get_pipeline'),
+      minValue: z.number().int().min(1).max(10).optional().describe('A scale question: the least answer that passes'),
+      enabled: z.boolean().optional().describe('false: suggested only, holding nobody to anything. Default true'),
+    }).optional().describe('This question must pass before an opportunity enters the stage'),
+  });
+
+  server.registerTool('create_scoring_template', {
+    title: 'Create a scoring template',
+    description: 'Create a whole scoring template: its tiers (points for Priority A, B and C, A highest), categories and questions, each a 1 to 10 scale or a choice with scored options, and any stage gates. '
+      + 'Nothing edits a template in place. To customize one, read it with list_scoring_templates, change the copy with the user, and create it under a new name, "<template name> — custom" for a Profile\'s; makeDefault true makes new scores start on it. '
+      + 'At most 30 questions and 10 templates. Show the user the whole template and get a yes first. Admin, with a write key.',
+    inputSchema: {
+      name: z.string().min(1).max(80),
+      tierMinimums: z.object({ a: z.number(), b: z.number(), c: z.number() }).describe('The points each priority starts at'),
+      categories: z.array(z.object({ name: z.string().min(1).max(80), questions: z.array(QUESTION).min(1) })).min(1),
+      makeDefault: z.boolean().optional().describe('Make it the default template in the same step'),
+    },
+    annotations: ADDS,
+  }, async (template) => run(() => yacrum.post('/scoring-templates', template))());
+
+  server.registerTool('set_default_scoring_template', {
+    title: 'Make a scoring template the default',
+    description: 'Make a template the default: the one a new score starts on. Existing scores keep their template. Say which and get a yes first. Admin, with a write key.',
+    inputSchema: { templateId: ID.describe('From list_scoring_templates') },
+    annotations: CONSEQUENTIAL,
+  }, async ({ templateId }) => run(() => yacrum.put(`/scoring-templates/${encodeURIComponent(templateId)}/default`, {}))());
+
+  // ── SKUs and leads (david-loadman/yacrum#471) ─────────────────────────────
+  server.registerTool('list_skus', {
+    title: 'SKUs',
+    description: 'The workspace\'s live SKUs: code, type, description, price and billing period, in the workspace\'s base currency.',
+    inputSchema: {},
+    annotations: READ,
+  }, run(() => yacrum.get('/skus')));
+
+  server.registerTool('create_sku', {
+    title: 'Create a SKU',
+    description: 'Add a SKU: a code used once, a type, and a price in the workspace\'s base currency with its period. '
+      + 'type is exactly one of Services, Expense, Admin, HW Product, SW License (monthly), SW License (annual), SW License (one-time): offer the user that list, never a word of your own. A SW License type fixes the period. Admin, with a write key.',
+    inputSchema: {
+      code: z.string().min(1).max(50),
+      type: z.enum(['Services', 'Expense', 'Admin', 'HW Product', 'SW License (monthly)', 'SW License (annual)', 'SW License (one-time)']),
+      description: z.string().max(2000).optional(),
+      price: z.object({ amount: z.number().min(0).max(10_000_000), period: z.enum(['one-time', 'monthly', 'annually']) }),
+      defaultTermMonths: z.number().int().positive().optional().describe('A recurring SKU\'s usual term, in months'),
+      taxExempt: z.boolean().optional(),
+    },
+    annotations: ADDS,
+  }, async (sku) => run(() => yacrum.post('/skus', sku))());
+
+  const LEAD_FIELDS = {
+    name: z.string().max(200).optional(),
+    email: z.string().email().max(320).optional(),
+    phone: z.string().max(50).optional(),
+    title: z.string().max(200).optional(),
+    companyName: z.string().max(200).optional().describe('As text: a lead is matched to a company when it is converted'),
+    interest: z.string().max(5000).optional().describe('What they asked about'),
+    leadSource: z.enum(['Referral', 'Website', 'Existing Customer', 'Trade Show', 'Social Media', 'Other']).optional(),
+    leadSourceDetail: z.string().max(200).optional(),
+  };
+
+  server.registerTool('list_leads', {
+    title: 'Leads',
+    description: 'The workspace\'s open leads, or the converted ones: people not yet a contact of a company.',
+    inputSchema: { status: z.enum(['open', 'converted']).optional() },
+    annotations: READ,
+  }, async ({ status }) => run(() => yacrum.get('/leads', status === 'converted' ? { status } : undefined))());
+
+  server.registerTool('create_lead', {
+    title: 'Create a lead',
+    description: 'Add a lead: a person who may become a contact, with a name or an email at least. One open lead per email. Admin, Sales or Sales Engineer.',
+    inputSchema: LEAD_FIELDS,
+    annotations: ADDS,
+  }, async (lead) => run(() => yacrum.post('/leads', lead))());
+
+  server.registerTool('update_lead', {
+    title: 'Change a lead',
+    description: 'Change a lead\'s details; what is not sent stays. Converting a lead to a contact is done in Yacrum. Admin, Sales or Sales Engineer.',
+    inputSchema: { leadId: ID.describe('From list_leads'), ...LEAD_FIELDS },
+    annotations: UPDATES,
+  }, async ({ leadId, ...change }) => run(() => yacrum.patch(`/leads/${encodeURIComponent(leadId)}`, change))());
 
   server.registerTool('score_opportunity', {
     title: 'Score an opportunity',
