@@ -1,9 +1,10 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { mkdtempSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { YacrumClient } from '../src/client.js';
 import { registerTools, summarisePipeline } from '../src/tools.js';
@@ -501,3 +502,24 @@ describe('the pipeline summary', () => {
     });
   });
 });
+
+describe('the plugin\'s skills (david-loadman/yacrum#472)', () => {
+  /** A backticked word that reads as a tool call: a verb prefix and snake_case, or one of the plain-named reads. */
+  const TOOL_LIKE = /`((?:list|get|create|update|delete|add|apply|set|preview|import|undo|score|move|log|snooze|unsnooze|reorder|stage|deal|qualification|pipeline)_[a-z_]+|whoami|search|forecast)`/g;
+
+  /** Words a skill quotes that look like tools and are not: a feature key the skill tells Claude never to show. */
+  const NOT_TOOLS = new Set(['deal_team']);
+
+  it('⛔ names only tools the server has, so a skill never calls one that is missing', async () => {
+    const client = await connect(fakeYacrum({}).fetcher);
+    const tools = new Set((await client.listTools()).tools.map((t) => t.name));
+    const skillsDir = fileURLToPath(new URL('../plugin/skills', import.meta.url));
+    const missing: string[] = [];
+    for (const skill of readdirSync(skillsDir)) {
+      const text = readFileSync(join(skillsDir, skill, 'SKILL.md'), 'utf8');
+      for (const [, name] of text.matchAll(TOOL_LIKE)) if (!tools.has(name) && !NOT_TOOLS.has(name)) missing.push(`${skill}: ${name}`);
+    }
+    expect(missing).toEqual([]);
+  });
+});
+
