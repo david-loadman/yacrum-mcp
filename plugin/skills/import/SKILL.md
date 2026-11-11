@@ -43,6 +43,10 @@ Follow `next` in what comes back, and call `preview_import` with `importId` each
 - **Custom fields, if asked:** show the columns in `setup.survey.offered` by their label, with how full each is, and ask which to keep and whether each is free text or a list. Send each kept column under its `ref` (such as `company:Market Segment`), never its header, as `text` or `select`.
 - **Product types, if asked:** for each product in `setup.survey.untypedProducts`, show the user the types in `setup.options.skuTypes` and ask which. Send them in `productTypes` exactly as listed (`HW Product`, not *hardware*). Never guess a type, and never invent one.
 
+**The preview may ask two more things:**
+- **`needsRate`:** some opportunities are in the other currency and the workspace has no USD/CAD rate. Ask the user for the rate (1 USD in CAD) and send it as `usdCadRate`. Tell them it is saved for the workspace when the import starts, cannot be cleared, and stays if the import is undone.
+- **`needsContact`:** companies with no people, each with the opportunities that need a contact. For each, ask the user for a contact's name and email and send it in `contactsToAdd` under the `companyRef`, or let them leave it out, and those opportunities are not imported. Never make one up.
+
 A refusal with `problems` says what to change. If `previewProblems` appears, the workspace has changed since the answers were saved, so settle those again.
 
 ## 4. The report

@@ -261,6 +261,8 @@ describe('the setup and import tools (#405)', () => {
     const description = (await client.listTools()).tools.find((t) => t.name === 'preview_import')?.description ?? '';
     expect(description).toMatch(/one of setup\.options\.skuTypes, exactly as written there/);
     expect(description).toMatch(/keyed by a column's ref from setup\.survey\.offered .*never its header/);
+    expect(description).toMatch(/preview\.needsRate .*mapping\.usdCadRate/);
+    expect(description).toMatch(/preview\.needsContact.*mapping\.contactsToAdd.*Never invent a contact or a rate/);
   });
 
   it('reads the setup, the Profiles and the templates, and shows or hides a feature', async () => {
