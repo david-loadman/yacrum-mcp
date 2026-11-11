@@ -105,8 +105,9 @@ connector: draft in your mailbox with the BCC from `get_outreach_settings`, and 
 an account pulse before a meeting, the weekly pipeline review and qualifying an opportunity. Outreach is drafted
 in your own mailbox with your workspace's logging address in BCC. Nothing is sent.
 
-It also has two for an Admin: `/yacrum:setup` interviews you, shows a Profile's diff and applies it once you agree,
-and `/yacrum:import` brings in a Pipedrive or HubSpot export or a spreadsheet. Both need an Admin's write key and a
+It also has three for an Admin: `/yacrum:setup` walks you through the profile, its stages and scoring, and the features, explaining each, and saves only once you agree;
+`/yacrum:scoring-template` builds a scoring template with you;
+and `/yacrum:import` brings in a Pipedrive or HubSpot export or a spreadsheet. All three need an Admin's write key and a
 local server, so they work in Claude Code and Claude Desktop, and not on claude.ai on the web.
 
 ```bash
