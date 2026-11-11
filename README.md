@@ -2,7 +2,7 @@
 
 An [MCP](https://modelcontextprotocol.io) server for the **Yacrum** CRM. It lets Claude Desktop, Claude Code
 and other MCP clients search, create and update your CRM records, log activity, read the pipeline and the
-forecast, and summarise a deal. Your own AI does the thinking; this server only fetches from Yacrum.
+forecast, and summarize a deal. Your own AI does the thinking; this server only fetches from Yacrum.
 
 It talks to Yacrum through its public REST API, with **your own API key**. A key acts as the member it was
 made for, with that member's role: the server can do exactly what that person could do in the app, and
@@ -67,7 +67,7 @@ claude mcp add yacrum --env YACRUM_API_KEY=yk_your_key_here -- npx -y yacrum-mcp
 | `list_scoring_templates` | The workspace's scoring templates: questions, choices, weights, tiers, maximums and stage gates |
 | `score_opportunity` | Score a deal, or change its answers or template (switching template deletes the old answers) |
 | `stage_readiness` | The stage gates ahead of a deal, met or not, and the next stage when all of its gates are met |
-| `deal_context` | Everything about one deal in one read, to summarise it or draft to it, with the CASL consent facts for its contacts |
+| `deal_context` | Everything about one deal in one read, to summarize it or draft to it, with the CASL consent facts for its contacts |
 | `list_profiles`, `get_workspace_setup` | The seven Profiles, and how far the workspace is set up (Admin) |
 | `apply_profile` | Apply a Profile. `dryRun` is required: `true` answers with the diff and changes nothing (Admin) |
 | `set_workspace_features` | Show or hide Quotes, Forecast, Deal team and CASL. Hiding authorizes nothing (Admin) |
@@ -155,6 +155,6 @@ The Yacrum API is described at `<YACRUM_URL>/api/v1/openapi.json`.
 npm resolves `yacrum-mcp` to the local package instead of the published one, and finds no command to run. Start
 Claude Code, or `npx`, from another directory, or point the MCP config at `node <clone>/dist/index.js`.
 
-## Licence
+## License
 
 MIT

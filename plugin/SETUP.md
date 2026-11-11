@@ -73,8 +73,8 @@ Connect the **Gmail** connector in Claude, under Settings → Connectors. Claude
 Drafting in Outlook needs more setup, and only a work or school account will do:
 
 1. **A Microsoft 365 work or school account.** Personal outlook.com and hotmail.com accounts cannot be used.
-2. **Admin consent.** A **Microsoft Entra Global Administrator** in your organisation consents to the Claude
-   Microsoft 365 connector for the organisation.
+2. **Admin consent.** A **Microsoft Entra Global Administrator** in your organization consents to the Claude
+   Microsoft 365 connector for the organization.
 3. **Write actions turned on.** An admin turns on the connector's **write actions**: "send mail and manage
    drafts". The plugin only ever creates drafts.
 4. Connect the **Microsoft 365** connector in Claude, under Settings → Connectors.

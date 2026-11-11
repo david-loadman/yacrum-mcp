@@ -330,7 +330,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
 
   server.registerTool('deal_context', {
     title: 'Deal context',
-    description: 'Everything about one deal in one read, to summarise it or draft to it: the deal (with its Sales Health as status G/Y/R and statusDescription), its company and contact, stage history, quotes, qualification, gates (the stage gates ahead and readyFor), open action items, notes, recent activity, whether you may edit it, and consent: the CASL facts (the company\'s last purchase; each contact\'s country and last inquiry) for the primary contact and the quote\'s contact. Facts, never a verdict.',
+    description: 'Everything about one deal in one read, to summarize it or draft to it: the deal (with its Sales Health as status G/Y/R and statusDescription), its company and contact, stage history, quotes, qualification, gates (the stage gates ahead and readyFor), open action items, notes, recent activity, whether you may edit it, and consent: the CASL facts (the company\'s last purchase; each contact\'s country and last inquiry) for the primary contact and the quote\'s contact. Facts, never a verdict.',
     inputSchema: { opportunityId: ID },
     annotations: READ,
   }, async ({ opportunityId }) => run(() => yacrum.get(`/opportunities/${encodeURIComponent(opportunityId)}/context`))());
@@ -542,15 +542,15 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
   }, async ({ importId }) => run(() => yacrum.post(`/imports/${encodeURIComponent(importId)}/undo`))());
 
   server.registerPrompt('summarize_deal', {
-    title: 'Summarise a deal',
-    description: 'Read a deal\'s whole context from Yacrum and summarise where it stands and what to do next.',
+    title: 'Summarize a deal',
+    description: 'Read a deal\'s whole context from Yacrum and summarize where it stands and what to do next.',
     argsSchema: { opportunityId: z.string().describe('The opportunity\'s id; use search to find it') },
   }, ({ opportunityId }) => ({
     messages: [{
       role: 'user',
       content: {
         type: 'text',
-        text: `Call deal_context for opportunity ${opportunityId}. Then summarise the deal: where it stands (stage, amount, probability, expected close), who is involved, what has happened recently, how well it is qualified, what is open, and the risks. End with the next steps you recommend.`,
+        text: `Call deal_context for opportunity ${opportunityId}. Then summarize the deal: where it stands (stage, amount, probability, expected close), who is involved, what has happened recently, how well it is qualified, what is open, and the risks. End with the next steps you recommend.`,
       },
     }],
   }));
