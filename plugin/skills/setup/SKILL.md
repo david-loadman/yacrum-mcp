@@ -26,30 +26,30 @@ Call `list_profiles`. Ask at most these three, together. Only the first is neede
 
    | Answer | Profile |
    |---|---|
-   | Technical products from our own catalogue | `product_seller` |
+   | Technical products from our own catalog | `product_seller` |
    | Services, won through proposals | `services_consultant` |
-   | Other manufacturers' products, on commission | `mfr_rep` |
+   | Other manufacturers' products | `mfr_rep` |
    | Hardware plus our services and support | `var_si` |
    | Engineering, design or build-to-spec from RFQs | `eng_design_cm` |
-   | Managed IT or security services, billed monthly | `managed_services` |
-   | Calibration, testing or industrial services, on repeat contracts | `cal_test_lab` |
+   | Managed IT or security services | `managed_services` |
+   | Calibration, testing or industrial services | `cal_test_lab` |
 
-2. **Who works a deal?** Just me · Reps · Reps and a Sales Engineer. *Reps and a Sales Engineer* shows Deal team, and *Just me* hides it.
+2. **Who works a deal?** Just me · Reps · Reps and a Sales Engineer. *Reps and a Sales Engineer* shows Opportunity team, and *Just me* hides it.
 3. **Do you sell to Canadian customers?** Yes shows CASL.
 
 Recommend one Profile with a one-paragraph reason. Show its stages and its 10 qualification questions. Offer the other six if it doesn't fit. Open stages can be renamed before applying: collect any renames as `stageNames`, by position.
 
 ## 3. Features
 
-Present the Profile's `featureDefaults` adjusted by the answers, and ask which to change. The features are Quotes and SKUs (`quotes`), Forecast (`forecast`), Deal team (`deal_team`) and CASL consent (`casl`).
+Present the Profile's `featureDefaults` adjusted by the answers, and ask which to change. The features are Quotes and SKUs (`quotes`), Forecast (`forecast`), Opportunity team (`deal_team`) and CASL consent (`casl`).
 
 Always say:
 - Hiding a feature only hides it. It authorizes nothing and removes nothing.
-- Gating is off until they turn it on in a scoring template or on a stage. The Profile's gates are suggestions until then.
+- Opportunity stage gating is off until they enable it in an opportunity scoring template or on an opportunity stage. The Profile's gates are suggestions until then.
 - **When Quotes is hidden:** a deal gets a quote attachment instead, a link or a PDF with the day it was sent, so a quote made elsewhere still counts.
 - This note, as it stands:
 
-  > Your profile comes with a 10-question qualification template. An *Advanced — strategic accounts* template (15 questions, with deeper authority and timeline scoring) is also installed. You can switch to it or copy it in Customization → Scoring Framework.
+  > Your workspace profile includes a default opportunity qualification scoring template. An Advanced template is also installed. You can change or customize the template in Customization → Scoring Framework.
 
 ## 4. The diff, then apply
 

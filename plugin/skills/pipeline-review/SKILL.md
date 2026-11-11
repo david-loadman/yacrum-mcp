@@ -31,7 +31,7 @@ skipped read makes its section look empty when it isn't.
 5. **`get_signals`** with the same scope and `types: ["deal.slipping", "deal.stale", "deal.no_next_step", "quote.expiring"]`:
    what needs attention.
 
-## 3. Summarise in the chat
+## 3. Summarize in the chat
 
 Give **every** section below, in this order, under its own heading. When a section has nothing in it, write
 "None this week": a section left out reads as nothing to report.

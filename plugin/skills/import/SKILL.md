@@ -1,6 +1,6 @@
 ---
 name: import
-description: Import another CRM's export or a spreadsheet into Yacrum with its Admin — upload the files, settle every answer, show the report with duplicates and held rows, confirm, run and summarise. Use when the user wants to bring data into Yacrum from Pipedrive, HubSpot or a spreadsheet, or runs /yacrum:import.
+description: Import another CRM's export or a spreadsheet into Yacrum with its Admin — upload the files, settle every answer, show the report with duplicates and held rows, confirm, run and summarize. Use when the user wants to bring data into Yacrum from Pipedrive, HubSpot or a spreadsheet, or runs /yacrum:import.
 argument-hint: "[full paths to the files]"
 ---
 
@@ -60,6 +60,6 @@ Ask for an explicit yes. Then call `import_records` with the `importId`, and aga
 
 If a call is refused, relay it. `get_import_status` says where the import stands, and they can go on with it.
 
-## 6. Summarise
+## 6. Summarize
 
 Call `get_import_status`. Give what was created, held and failed, from `totals`. Say **undo is available**: all of it or none, refused while records made since hang off what it created. Call `undo_import` only after they ask and you have said what will go.
