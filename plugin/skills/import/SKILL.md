@@ -40,8 +40,8 @@ Follow `next` in what comes back, and call `preview_import` with `importId` each
 - **Lost reasons:** each to one of theirs, with the default for the rest.
 - **Company type:** the type for new companies.
 - **Open deals in the forecast:** ask, as `includeOpenDealsInForecast`.
-- **Custom fields, if asked:** each as `text` or `select`.
-- **Product types, if asked:** each product's SKU type, as `productTypes`.
+- **Custom fields, if asked:** show the columns in `setup.survey.offered` by their label, with how full each is, and ask which to keep and whether each is free text or a list. Send each kept column under its `ref` (such as `company:Market Segment`), never its header, as `text` or `select`.
+- **Product types, if asked:** for each product in `setup.survey.untypedProducts`, show the user the types in `setup.options.skuTypes` and ask which. Send them in `productTypes` exactly as listed (`HW Product`, not *hardware*). Never guess a type, and never invent one.
 
 A refusal with `problems` says what to change. If `previewProblems` appears, the workspace has changed since the answers were saved, so settle those again.
 

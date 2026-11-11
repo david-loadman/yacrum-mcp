@@ -492,7 +492,9 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
   server.registerTool('preview_import', {
     title: 'Upload and preview an import',
     description: 'Every step of an import before it runs, and none of them reaches the workspace\'s records. Start with files and source: it uploads them. Then send importId with what the answer asks for: next columns (a spreadsheet) wants columns; next answers wants mapping, the setup.mapping it returned with the answers changed. Each call returns where the import has got, and the preview once answers are saved: counts, duplicates, held rows with reasons, warnings and canadianContacts. '
-      + 'stageSuggestions are never applied unless sent back in mapping.stages. A duplicate group is decided in mapping.duplicates only by the user. Files are read from this computer: full paths to .csv or .xlsx files only, at most 12, 10 MB each and 25 MB together. Admin, with a write key.',
+      + 'stageSuggestions are never applied unless sent back in mapping.stages. A duplicate group is decided in mapping.duplicates only by the user. '
+      + 'mapping.productTypes maps a product\'s name to one of setup.options.skuTypes, exactly as written there: offer the user that list for each of setup.survey.untypedProducts, never a word of your own. '
+      + 'mapping.customFields is keyed by a column\'s ref from setup.survey.offered (such as "company:Market Segment"), never its header, each "text" or "select". A refusal\'s details.problems says what to change. Files are read from this computer: full paths to .csv or .xlsx files only, at most 12, 10 MB each and 25 MB together. Admin, with a write key.',
     inputSchema: {
       files: z.array(z.string().min(1)).min(1).optional().describe('Full paths on this computer, to start an import'),
       source: z.enum(['pipedrive', 'hubspot', 'spreadsheet']).optional().describe('With files: what they are, as the user confirmed'),
