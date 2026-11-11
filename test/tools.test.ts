@@ -220,23 +220,25 @@ describe('the signals, outreach, quote, action-item and pipeline-changes tools (
     const reads = ['whoami', 'search', 'list_companies', 'get_company', 'list_company_types', 'list_contacts', 'list_opportunities',
       'get_pipeline', 'pipeline_summary', 'forecast', 'qualification_score', 'deal_context', 'get_signals', 'get_outreach_settings',
       'list_quotes', 'get_quote', 'list_action_items', 'pipeline_changes', 'list_scoring_templates', 'stage_readiness',
-      'list_profiles', 'get_workspace_setup', 'get_import_templates', 'get_import_status'];
+      'list_profiles', 'get_workspace_setup', 'get_import_templates', 'get_import_status', 'list_skus', 'list_leads'];
     for (const name of reads) expect([name, tools[name]]).toEqual([name, { readOnlyHint: true }]);
-    for (const name of ['create_company', 'create_contact', 'create_opportunity', 'log_activity', 'create_action_item']) {
+    for (const name of ['create_company', 'create_contact', 'create_opportunity', 'log_activity', 'create_action_item',
+      'add_stage', 'create_scoring_template', 'create_sku', 'create_lead']) {
       expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: false }]);
     }
-    for (const name of ['update_opportunity', 'set_sales_health', 'update_action_item', 'snooze_signal', 'unsnooze_signal']) {
+    for (const name of ['update_opportunity', 'set_sales_health', 'update_action_item', 'snooze_signal', 'unsnooze_signal',
+      'update_stage', 'reorder_stages', 'update_lead']) {
       expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: false, idempotentHint: true }]);
     }
     expect(tools.preview_import).toEqual({ readOnlyHint: false, destructiveHint: false });
     expect(tools.set_workspace_features).toEqual({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
-    for (const name of ['move_opportunity_stage', 'apply_profile', 'import_records', 'undo_import']) {
+    for (const name of ['move_opportunity_stage', 'apply_profile', 'import_records', 'undo_import', 'delete_stage', 'set_default_scoring_template']) {
       expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: true }]);
     }
     // ⚑ Scoring on another template deletes the old answers.
     expect(tools.score_opportunity).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     // Every tool is in one of the lists above: none is left unannotated.
-    expect(Object.keys(tools)).toHaveLength(reads.length + 5 + 5 + 4 + 1 + 2);
+    expect(Object.keys(tools)).toHaveLength(reads.length + 9 + 8 + 6 + 1 + 2);
   });
 });
 
@@ -420,6 +422,70 @@ describe('the setup and import tools (#405)', () => {
       ];
       for (const [name, args] of calls) expect(JSON.stringify(await client.callTool({ name, arguments: args }))).not.toContain(KEY);
     }
+  });
+});
+
+describe('the stage, template, SKU and lead writes (david-loadman/yacrum#471)', () => {
+  it('⛔ adds a stage and moves it to the position asked, among the open stages only', async () => {
+    const open = [{ id: 's1', kind: 'open' }, { id: 's2', kind: 'open' }, { id: 'new', kind: 'open' }, { id: 'won', kind: 'won' }];
+    const { calls, fetcher } = fakeYacrum({
+      'POST /pipeline/stages': () => ({ status: 201, body: { data: { id: 'new' } } }),
+      'GET /pipeline': () => ({ body: { data: { stages: open, lostReasons: [] } } }),
+      'PUT /pipeline/stages/order': () => ({ body: { data: null } }),
+    });
+    const client = await connect(fetcher);
+    const result = await client.callTool({ name: 'add_stage', arguments: { name: 'Evaluation', defaultProbability: 40, position: 2 } });
+    expect(JSON.parse(text(result))).toEqual({ id: 'new', position: 2 });
+    expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ name: 'Evaluation', defaultProbability: 40 });
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ stageIds: ['s1', 'new', 's2'] });
+  });
+
+  it('changes, reorders and removes a stage by id, and relays a refusal as Yacrum words it', async () => {
+    const { calls, fetcher } = fakeYacrum({
+      'PATCH /pipeline/stages/s1': () => ({ body: { data: null } }),
+      'PUT /pipeline/stages/order': () => ({ body: { data: null } }),
+      'DELETE /pipeline/stages/s1': () => ({ status: 409, body: { error: { code: 'constraint_violation', message: 'A stage with opportunities in it cannot be deleted.' } } }),
+    });
+    const client = await connect(fetcher);
+    await client.callTool({ name: 'update_stage', arguments: { stageId: 's1', name: 'Discovery' } });
+    expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({ name: 'Discovery' });
+    await client.callTool({ name: 'reorder_stages', arguments: { stageIds: ['s2', 's1'] } });
+    const refused = await client.callTool({ name: 'delete_stage', arguments: { stageId: 's1' } });
+    expect(refused.isError).toBe(true);
+    expect(text(refused)).toMatch(/409 constraint_violation\): A stage with opportunities in it cannot be deleted/);
+  });
+
+  it('creates a whole template and makes one the default', async () => {
+    const { calls, fetcher } = fakeYacrum({
+      'POST /scoring-templates': () => ({ status: 201, body: { data: { id: 't1', name: 'Robotics — custom' } } }),
+      'PUT /scoring-templates/t1/default': () => ({ body: { data: null } }),
+    });
+    const client = await connect(fetcher);
+    const template = {
+      name: 'Robotics — custom', tierMinimums: { a: 16, b: 12, c: 8 }, makeDefault: false,
+      categories: [{ name: 'Fit', questions: [{ label: 'Budget', kind: 'scale', weight: 1, gate: { stageId: 'q', minValue: 7 } }] }],
+    };
+    await client.callTool({ name: 'create_scoring_template', arguments: template });
+    expect(calls.find((c) => c.method === 'POST')?.body).toEqual(template);
+    await client.callTool({ name: 'set_default_scoring_template', arguments: { templateId: 't1' } });
+    expect(calls.some((c) => c.method === 'PUT' && c.url.pathname.endsWith('/scoring-templates/t1/default'))).toBe(true);
+  });
+
+  it('⛔ takes a SKU type only from Yacrum\'s list, and lists and writes leads', async () => {
+    const { calls, fetcher } = fakeYacrum({
+      'POST /skus': () => ({ status: 201, body: { data: { id: 'k1' } } }),
+      'GET /leads': () => ({ body: { data: [] } }),
+      'POST /leads': () => ({ status: 201, body: { data: { id: 'l1' } } }),
+      'PATCH /leads/l1': () => ({ body: { data: { id: 'l1' } } }),
+    });
+    const client = await connect(fetcher);
+    expect((await client.callTool({ name: 'create_sku', arguments: { code: 'M-1', type: 'hardware', price: { amount: 1, period: 'one-time' } } })).isError).toBe(true);
+    await client.callTool({ name: 'create_sku', arguments: { code: 'M-1', type: 'HW Product', price: { amount: 2400, period: 'one-time' } } });
+    expect(calls.find((c) => c.method === 'POST' && c.url.pathname.endsWith('/skus'))?.body).toMatchObject({ type: 'HW Product' });
+    await client.callTool({ name: 'list_leads', arguments: { status: 'converted' } });
+    await client.callTool({ name: 'create_lead', arguments: { name: 'Erin Hall', leadSource: 'Trade Show' } });
+    await client.callTool({ name: 'update_lead', arguments: { leadId: 'l1', phone: '555-0100' } });
+    expect(calls.find((c) => c.method === 'PATCH')?.body).toEqual({ phone: '555-0100' });
   });
 });
 

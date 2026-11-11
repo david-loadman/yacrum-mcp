@@ -74,6 +74,10 @@ claude mcp add yacrum --env YACRUM_API_KEY=yk_your_key_here -- npx -y yacrum-mcp
 | `get_import_templates` | The spreadsheet templates, and what each CRM's export looks like (Admin) |
 | `preview_import` | Upload an export or spreadsheet from this computer, save the answers, and see what the import would do. Nothing reaches the workspace's records (Admin) |
 | `import_records`, `get_import_status`, `undo_import` | Run an import (call again while `more` is true), see where it has got, and undo it, all or none (Admin) |
+| `add_stage`, `update_stage`, `reorder_stages`, `delete_stage` | Add an open stage (at a position, if asked), change, reorder or remove one, with the pipeline editor's rules (Admin) |
+| `create_scoring_template`, `set_default_scoring_template` | Create a whole scoring template (questions, choices, tiers, stage gates), and make one the default. Templates are never edited in place: customize by creating a changed copy (Admin) |
+| `list_skus`, `create_sku` | The SKUs, and add one, priced in the workspace's base currency (Admin to add) |
+| `list_leads`, `create_lead`, `update_lead` | Leads, open or converted, and add or change one |
 
 There is also a **`summarize_deal`** prompt that reads a deal's context and asks for a summary and next steps.
 
