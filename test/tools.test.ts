@@ -221,7 +221,7 @@ describe('the signals, outreach, quote, action-item and pipeline-changes tools (
     const reads = ['whoami', 'search', 'list_companies', 'get_company', 'list_company_types', 'list_contacts', 'list_opportunities',
       'get_pipeline', 'pipeline_summary', 'forecast', 'qualification_score', 'deal_context', 'get_signals', 'get_outreach_settings',
       'list_quotes', 'get_quote', 'list_action_items', 'pipeline_changes', 'list_scoring_templates', 'stage_readiness',
-      'list_profiles', 'get_workspace_setup', 'get_import_templates', 'get_import_status', 'list_skus', 'list_leads'];
+      'list_scoring_starters', 'get_workspace_setup', 'get_quote_document', 'get_import_templates', 'get_import_status', 'list_skus', 'list_leads'];
     for (const name of reads) expect([name, tools[name]]).toEqual([name, { readOnlyHint: true }]);
     for (const name of ['create_company', 'create_contact', 'create_opportunity', 'log_activity', 'create_action_item',
       'add_stage', 'create_scoring_template', 'create_sku', 'create_lead']) {
@@ -233,7 +233,7 @@ describe('the signals, outreach, quote, action-item and pipeline-changes tools (
     }
     expect(tools.preview_import).toEqual({ readOnlyHint: false, destructiveHint: false });
     expect(tools.set_workspace_features).toEqual({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
-    for (const name of ['move_opportunity_stage', 'apply_profile', 'import_records', 'undo_import', 'delete_stage', 'set_default_scoring_template']) {
+    for (const name of ['move_opportunity_stage', 'apply_setup', 'import_records', 'undo_import', 'delete_stage', 'set_default_scoring_template']) {
       expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: true }]);
     }
     // ⚑ Scoring on another template deletes the old answers.
@@ -268,30 +268,42 @@ describe('the setup and import tools (#405)', () => {
     expect(description).toMatch(/preview\.needsContact.*mapping\.contactsToAdd.*Never invent a contact or a rate/);
   });
 
-  it('reads the setup, the Profiles and the templates, and shows or hides a feature', async () => {
+  it('reads the setup, the scoring starters and the templates, and shows or hides a feature', async () => {
     const { calls, fetcher } = fakeYacrum({
-      'GET /profiles': () => ({ body: { data: [{ key: 'product_seller' }] } }),
+      'GET /scoring-starters': () => ({ body: { data: [{ key: 'products' }] } }),
       'GET /workspace/setup': () => ({ body: { data: { onboarding: { status: 'not_started' } } } }),
       'GET /imports/templates': () => ({ body: { data: { spreadsheet: [], exports: {} } } }),
       'PATCH /workspace/features': () => ({ body: { data: { hidden: ['quotes'] } } }),
     });
     const client = await connect(fetcher);
-    expect(text(await client.callTool({ name: 'list_profiles', arguments: {} }))).toContain('product_seller');
+    expect(text(await client.callTool({ name: 'list_scoring_starters', arguments: {} }))).toContain('products');
     expect(text(await client.callTool({ name: 'get_workspace_setup', arguments: {} }))).toContain('not_started');
     expect(text(await client.callTool({ name: 'get_import_templates', arguments: {} }))).toContain('spreadsheet');
-    await client.callTool({ name: 'set_workspace_features', arguments: { quotes: false } });
-    expect(calls.at(-1)).toMatchObject({ method: 'PATCH', body: { quotes: false } });
+    await client.callTool({ name: 'set_workspace_features', arguments: { quotes: false, products: false, scoring: true } });
+    expect(calls.at(-1)).toMatchObject({ method: 'PATCH', body: { quotes: false, products: false, scoring: true } });
   });
 
-  it('will not apply a Profile unless dryRun is said, and sends what it was given', async () => {
-    const { calls, fetcher } = fakeYacrum({ 'POST /workspace/profile': () => ({ body: { data: { applied: false, defaulted: true } } }) });
+  it('⛔ will not apply setup unless dryRun is said, runs only the full path, and sends what it was given (david-loadman/yacrum#490)', async () => {
+    const { calls, fetcher } = fakeYacrum({ 'POST /workspace/setup': () => ({ body: { data: { applied: false } } }) });
     const client = await connect(fetcher);
-    const refused = await client.callTool({ name: 'apply_profile', arguments: { profileKey: 'var_si', templateMode: 'install_default' } });
+    const stages = [{ id: 's1', name: 'New' }, { id: 's2', name: 'Qualified' }, { name: 'Proposal' }];
+    const refused = await client.callTool({ name: 'apply_setup', arguments: { path: 'full', team: 'seller', stages } });
     expect(refused.isError).toBe(true);
+    const simple = await client.callTool({ name: 'apply_setup', arguments: { path: 'simple', team: 'seller', stages, dryRun: true } });
+    expect(simple.isError).toBe(true);
     expect(calls).toHaveLength(0);
 
-    await client.callTool({ name: 'apply_profile', arguments: { profileKey: 'var_si', templateMode: 'install_default', dryRun: true, featureChanges: { casl: true } } });
-    expect(calls[0]).toMatchObject({ method: 'POST', body: { profileKey: 'var_si', dryRun: true, featureChanges: { casl: true } } });
+    await client.callTool({ name: 'apply_setup', arguments: { path: 'full', team: 'seller_fae', stages, dryRun: true, casl: true, scoring: null } });
+    expect(calls[0].url.pathname).toBe('/api/v1/workspace/setup');
+    expect(calls[0]).toMatchObject({ method: 'POST', body: { path: 'full', team: 'seller_fae', stages, dryRun: true, casl: true, scoring: null } });
+  });
+
+  it('reads an external quote\'s document', async () => {
+    const { calls, fetcher } = fakeYacrum({ 'GET /quotes/q1/document': () => ({ body: { data: { kind: 'link', url: 'https://example.com/q.pdf' } } }) });
+    const client = await connect(fetcher);
+    expect(text(await client.callTool({ name: 'get_quote_document', arguments: { quoteId: 'q1' } }))).toContain('example.com/q.pdf');
+    expect(calls[0]).toMatchObject({ method: 'GET' });
+    expect(calls[0].url.pathname).toBe('/api/v1/quotes/q1/document');
   });
 
   it('uploads the files as multipart with the source, and says what is asked next', async () => {
@@ -407,17 +419,17 @@ describe('the setup and import tools (#405)', () => {
 
   it('never echoes the key, whether Yacrum answers or refuses', async () => {
     const answering = importRoutes({
-      'GET /profiles': () => ({ body: { data: [] } }), 'GET /workspace/setup': () => ({ body: { data: {} } }),
-      'POST /workspace/profile': () => ({ body: { data: {} } }), 'PATCH /workspace/features': () => ({ body: { data: {} } }),
+      'GET /scoring-starters': () => ({ body: { data: [] } }), 'GET /workspace/setup': () => ({ body: { data: {} } }),
+      'POST /workspace/setup': () => ({ body: { data: {} } }), 'PATCH /workspace/features': () => ({ body: { data: {} } }),
       'GET /imports/templates': () => ({ body: { data: {} } }), 'POST /imports/i1/run': () => ({ body: { data: { status: 'completed' } } }),
       'POST /imports/i1/undo': () => ({ body: { data: {} } }),
     });
     const refusing = fakeYacrum({});
     for (const fetcher of [answering.fetcher, refusing.fetcher]) {
       const client = await connect(fetcher);
-      const profile = { profileKey: 'var_si', templateMode: 'keep_current', dryRun: true };
+      const setup = { path: 'full', team: 'seller', stages: [{ name: 'A' }, { name: 'B' }, { name: 'C' }], dryRun: true };
       const calls: Array<[string, Record<string, unknown>]> = [
-        ['list_profiles', {}], ['get_workspace_setup', {}], ['apply_profile', profile], ['set_workspace_features', { casl: true }],
+        ['list_scoring_starters', {}], ['get_workspace_setup', {}], ['apply_setup', setup], ['set_workspace_features', { casl: true }],
         ['get_import_templates', {}], ['preview_import', { files: [file('a.csv')], source: 'hubspot' }], ['preview_import', { importId: 'i1' }],
         ['import_records', { importId: 'i1' }], ['get_import_status', { importId: 'i1' }], ['undo_import', { importId: 'i1' }],
       ];
