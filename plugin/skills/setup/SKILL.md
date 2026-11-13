@@ -1,19 +1,19 @@
 ---
 name: setup
-description: Set up a Yacrum workspace with its Admin, step by step and explaining each idea as it comes — first the workspace profile with its opportunity stages and opportunity scoring, reviewed until the Admin is happy; then the features; then a dry run, a plain summary and permission to save. Offers the import afterwards. Use when the user asks to set up Yacrum, choose or change a Profile, or runs /yacrum:setup after making a key on the Claude screen.
+description: Set up a Yacrum workspace with its Admin, step by step and explaining each idea as it comes — who works an opportunity, the opportunity stages, products and services, the forecast, how quotes are made, and opportunity scoring from one of three starters — then a dry run, a plain summary and permission to save. Offers the import afterwards. Use when the user asks to set up Yacrum or change how it is set up, or runs /yacrum:setup after making a key on the Claude screen.
 ---
 
 # Set up a workspace, step by step
 
-You walk the Admin through setting up their workspace. You explain, suggest and record; the Admin decides.
-**Nothing in Yacrum changes until Step 3, and only after an explicit yes.**
+You walk the Admin through Yacrum's full setup. You explain, suggest and record; the Admin decides.
+**Nothing in Yacrum changes until Step 8, and only after an explicit yes.**
 
 **How to talk:**
 - Assume the Admin has never seen Yacrum. The first time you use one of these words, say what it means in a
-  sentence: **profile**, **opportunity stage**, **opportunity scoring**, **stage gate**, **priority (A, B, C)**,
-  **feature**.
-- Say "opportunity", never "deal". Never show the Admin a field or key name (`deal_team`, `stageNames`,
-  `templateMode`): use the words on Yacrum's screens.
+  sentence: **opportunity stage**, **opportunity team**, **product catalog**, **forecast**, **quote**,
+  **opportunity scoring**, **stage gate**, **priority (A, B, C)**.
+- Say "opportunity", never "deal". Never show the Admin a field or key name (`seller_fae`, `stagePosition`,
+  `incotermsEnabled`): use the words on Yacrum's screens.
 - One step per message. End each one with the question it needs answered.
 - Keep a running record of what the Admin has decided. Repeat it back at each review.
 
@@ -28,159 +28,127 @@ Call `whoami` and `get_workspace_setup`.
 - **Not an Admin, or a read key:** say that setup needs an Admin's write key, made on the Claude screen or at
   Administration → API Keys, and stop.
 - **A Yacrum refusal naming `invalid_key`:** the key is wrong or revoked. Say so, and stop.
-- **Setup is complete and the workspace has opportunities:** say the workspace is set up, name its profile, and ask
-  whether they want to change it. Go on only if they do. Opportunities will move between stages in a change, so read
-  the dry run's moves to them carefully in Step 3.
+- **Setup already applied** (`path` is not null): say so, and that running it again changes the settings it asks
+  about. A stage that holds opportunities cannot be removed. Go on only if they want to.
 
 Then explain, in a short paragraph:
-- the workspace already works with default settings, and setup makes it fit their business;
-- it has three steps: the profile (with its stages and scoring), the features, then a summary to approve;
+- the workspace already works with default settings, and setup makes it fit how they sell;
+- there are six short questions, then a summary to approve;
 - nothing changes until they say yes at the end.
 
 Ask whether to begin.
 
-## Step 1 — The workspace profile
+## Step 1 — Who works an opportunity
 
-**Explain:** a *profile* is a starting combination of settings for one kind of business:
-- its *opportunity stages*: the steps an opportunity goes through, such as New, Qualified, Quoted;
-- its *opportunity scoring* template: the questions that say how good an opportunity is;
-- which *features* are shown.
+**Explain:** an *opportunity* is a possible sale. Each has a salesperson. An *opportunity team* lets Sales Engineers
+join an opportunity beside the salesperson.
 
-Everything a profile puts in the workspace can be changed later.
+Ask: **is it the salesperson alone, or a salesperson with optional Sales Engineers?** Record `seller` or
+`seller_fae`.
 
-Call `list_profiles`. Show the seven, one line each: its name, what kind of business it suits, and its stages.
-Then ask, together, at most these three. Only the first is needed.
+Then ask, optionally: **do you sell to Canadian customers?** Yes shows CASL consent, the facts a Canadian anti-spam
+check needs. They may skip it.
 
-1. **What do you mostly sell?**
-
-   | Answer | Profile |
-   |---|---|
-   | Technical products from our own catalog | `product_seller` |
-   | Services, won through proposals | `services_consultant` |
-   | Other manufacturers' products | `mfr_rep` |
-   | Hardware plus our services and support | `var_si` |
-   | Engineering, design or build-to-spec from RFQs | `eng_design_cm` |
-   | Managed IT or security services | `managed_services` |
-   | Calibration, testing or industrial services | `cal_test_lab` |
-
-2. **Who works an opportunity?** Just me · Reps · Reps and a Sales Engineer.
-3. **Do you sell to Canadian customers?**
-
-Suggest one profile, with a short reason tied to their answers, and let them choose it or another.
-
-### 1a · Opportunity stages
+## Step 2 — Opportunity stages
 
 **Explain:**
-- An *opportunity stage* is a step in their sales process. Every opportunity sits in one, and the pipeline
-  board has a column for each.
-- Paused, Won and Lost are always there and are not part of the choice.
+- An *opportunity stage* is a step in their sales process. Every opportunity sits in one, and the pipeline board has
+  a column for each.
+- Paused, Won and Lost are always there and are not part of this step.
 - A pipeline has 3 to 10 open stages.
 
-Show the chosen profile's open stages in order, each with its default probability and what it means (its help text).
+From `get_workspace_setup`, show the open stages in order, each with what it means (its help text).
 Ask: **would you like to rename, add, remove or reorder any stage?**
 
-Record what they decide:
-- a rename of one of the profile's stages, by its position;
-- a stage to add: its name, where it goes, its probability, and what it means;
-- a stage to remove;
-- a new order.
+Record the whole list, in order: an existing stage by its id with its (new) name, a new stage with its name and what
+it means. A stage that holds opportunities cannot be removed: say so if they ask, and suggest renaming it instead.
 
-A stage that a scoring question gates (see 1b) cannot be removed until that gate is taken off: say so if it comes up.
+## Step 3 — Products and services
 
-### 1b · Opportunity scoring
+**Explain:** a *product catalog* is a list of what they sell (SKUs), each with a type, a billing period and a price.
+Quote lines are then picked from it. Without one, a quote line is typed in: a description and a price.
+
+Ask: **do you want a catalog of products and services?** Mention that a catalog can be imported from a spreadsheet
+afterwards with `/yacrum:import`.
+
+## Step 4 — Forecast
+
+**Explain:** the *forecast* shows bookings, billings and cash by month. Billings and cash need payment terms on each
+quote, and an invoice schedule on one-time services.
+
+Ask: **do you want the forecast?**
+
+## Step 5 — Quotes
+
+**Explain:** a *quote* is what goes to the customer with the price. There are two ways:
+- **Their own documents:** they attach the quote they sent, or link to it, with the day it went out. Line items are
+  optional, and set the opportunity's value when added. (`/yacrum:reconcile-quote` can later check a document
+  against its line items.)
+- **Made in Yacrum:** Yacrum builds the quote PDF from its lines, and the customer can accept it from a link.
+
+Ask which. If **made in Yacrum**, ask three more, together:
+1. **Charge tax on quotes?** Rates are entered in Customization → Taxes; say so.
+2. **Show Incoterms?** If yes, **which should a new quote start with:** EXW (Ex Works), FCA (Free Carrier), DAP
+   (Delivered at Place), or none?
+3. **Include a shipping estimate?**
+
+With their own documents, send tax, Incoterms and shipping as they are now in `get_workspace_setup`'s quote settings.
+
+## Step 6 — Opportunity scoring
 
 **Explain:**
 - *Opportunity scoring* rates how likely an opportunity is to be won, and how worth pursuing.
-- A template is categories of questions. Each question is answered on a scale of 1 to 10, or by picking one
-  of a few choices.
-- Each answer earns points. The points add to a total out of the template's maximum.
-- The total puts the opportunity in *Priority A, B or C*. Those are the score bands the template sets.
-- Reps answer the questions on each opportunity.
+- A template is categories of questions. Each question is answered on a scale of 1 to 10, or by picking one of a few
+  choices. Each answer earns points; the points add to a total.
+- The total puts the opportunity in *Priority A, B or C*.
+- A question can be a *stage gate*: it must be answered well enough before an opportunity may enter a stage, for
+  example "Budget at least 6 before Quoted". Gates are off unless turned on.
 
-**Explain stage gating:**
-- A question can be made a *stage gate*: it must be answered well enough before an opportunity may enter a
-  given stage. For example, "Budget at least 6 before Quoted".
-- Gates are **off** until they are enabled in the template or on the stage. The profile's gates are only
-  suggestions until then.
+Ask: **do you want to score opportunities?** If not, record scoring off and go to Step 7.
 
-From `list_profiles`, walk the profile's template category by category. For each question, give:
-- what it asks;
-- how it is answered;
-- its points;
-- any suggested gate.
+If yes, call `list_scoring_starters` and offer the three: **Products**, **Services**, **Products and services**, one
+line each. Suggest one from Step 3 and Step 5, and let them choose.
 
-Then ask: **would you like to add, remove or change any question, its choices or its points, or the A, B and C
-bands?** If they want to design their own from scratch, offer `/yacrum:scoring-template` and carry on with its result.
+Walk the chosen starter's template **one category at a time**: Fit, Economics, Authority, then Timing and Risk. For
+each question give what it asks, how it is answered, its points (10 × weight at a 10; a choice's score × weight) and
+any suggested gate. Ask: **add, remove or change any question, its points, or make one a stage gate?** A gate names
+the open stage it guards by position in their Step 2 list (2 or later), with a minimum for a scale question or the
+choices that pass for a choice question.
 
-If anything changes, say that their version is saved as **"<profile name> — custom"** and made the workspace's
-default, beside the profile's own. Yacrum never edits a template in place. Record the whole changed template:
-- its categories and questions;
-- each question's kind, choices and points;
-- the bands;
-- any gate, by the stage's name and whether it is on.
+Then work out the bands: Priority A at 80%, B at 65% and C at 50% of the template's maximum. If they want to set the
+bands themselves, use theirs (A above B above C). If they want to design a template from nothing, offer
+`/yacrum:scoring-template` afterwards instead, and set scoring on with the starter unchanged.
 
-### 1c · Review
+## Step 7 — Review
 
-Show the final opportunity stages and the scoring template together, as they will be. Ask whether they are ready or
-want more changes. Loop until they say they are ready. Then go to Step 2.
+Show everything decided, together: the team, the stages, the catalog, the forecast, the quotes and the scoring
+template. Ask whether they are ready or want changes. Loop until they are ready.
 
-## Step 2 — Features
+## Step 8 — Dry run, summary, and permission to save
 
-**Explain:** a *feature* is a part of Yacrum the workspace can show or hide. Hiding only hides it from the screens:
-nothing is deleted, nothing is refused, and it can be shown again at Administration → Workspace. The four are:
-- **Quotes and SKUs:** quotes with line items from the product list, their PDFs and acceptance links. When it is
-  hidden, an opportunity can carry a quote attachment instead (a link or a PDF with the day it was sent), so a quote
-  made elsewhere still counts.
-- **Forecast:** bookings, billings and cash by month.
-- **Opportunity team:** naming the Sales Engineers who work an opportunity beside the salesperson.
-- **CASL consent:** the facts a Canadian anti-spam check needs, for contacts in Canada.
+Call `apply_setup` with `dryRun: true`, `path: "full"`, and every answer:
+- `team`; `casl` only if answered;
+- `stages`: the whole list in order, existing ones with their `id`;
+- `products`, `forecast`;
+- `quotes`: all five settings;
+- `scoring`: `{ starterKey, template }` with the template as changed, or `null` for off.
 
-Show which will be on, from the profile and their answers in Step 1:
-- *Reps and a Sales Engineer* shows Opportunity team, and *Just me* hides it;
-- selling to Canadian customers shows CASL consent.
+Nothing changes. If Yacrum refuses, relay the refusal as worded, go back to the step it concerns, and dry-run again.
 
-Ask **which they would like to change**, and record it.
+Give one plain summary from the dry run: the stages (kept, renamed, new, removed), the features shown and hidden, the
+quote settings, and the scoring template that becomes the default with how many gates are on.
 
-## Step 3 — Dry run, summary, and permission to save
+Ask for **one explicit yes to all of it**. On yes, call `apply_setup` again with **exactly the same inputs** and
+`dryRun: false`. Say what was done. If it is refused, say nothing changed, relay the refusal, and offer to fix it.
 
-Call `apply_profile` with:
-- `dryRun: true`;
-- `templateMode: "install_default"`, unless they chose in 1b to keep the workspace's current template;
-- `stageNames`: the renames, by position;
-- `featureChanges`: the features decided.
-
-Nothing changes.
-
-Give one plain summary of everything that will happen, in this order:
-1. **The profile**, from the dry run: the stages, any opportunities that move and from where to where, the profile's
-   scoring template becoming the default, and the feature changes. If the dry run says the stage mapping is a
-   suggestion by position, say so. Read any gates turned off, sent-quote requirements dropped and automation rules
-   repointed.
-2. **Then the stage changes**, if any: each stage to add (where), to remove, and the new order.
-3. **Then the scoring template**, if they changed it: "<profile name> — custom", made the default.
-
-Ask for **one explicit yes to all of it**. If they want changes, go back to the step they name, and dry-run again.
-
-On yes, do it in this order, saying each as it finishes:
-1. `apply_profile` again with the same inputs, the dry run's `stageMap`, and `dryRun: false`.
-2. The stage changes, with ids from `get_pipeline`:
-   - `add_stage` for each new stage, with its `position`;
-   - `delete_stage` for each removal;
-   - `reorder_stages` if the order still differs.
-3. `create_scoring_template` with the whole changed template, its gates naming stage ids from `get_pipeline`, and
-   `makeDefault: true`.
-
-If Yacrum refuses a step, stop there. Relay the refusal as worded, say exactly what is already done, and offer to fix
-what was refused. Never repeat a step that already succeeded.
-
-## Step 4 — Import, then finish
+## Step 9 — Import, then finish
 
 Say in one sentence what is now set up. Ask whether they want to **bring in their data now** from a spreadsheet, a
-Pipedrive export or a HubSpot export. If they do, hand over to `/yacrum:import`.
+Pipedrive export or a HubSpot export, including a product catalog. If they do, hand over to `/yacrum:import`.
 
 Then finish with:
-- **The next steps in Yacrum:** invite the team (Administration → Manage Users), add a first opportunity, and
-  connect email (Administration → Workspace).
+- **The next steps in Yacrum:** invite the team (Administration → Manage Users), add a first opportunity, connect email
+  (Administration → Workspace). Anything left off can be turned on later in Administration → Workspace.
 - **The key:** "The key you made for this setup stays active until you revoke it, at Administration → API Keys,
   and it counts toward your plan's keys. If you only needed it for setup, you can revoke it now. Claude will then
   need a new key next time."

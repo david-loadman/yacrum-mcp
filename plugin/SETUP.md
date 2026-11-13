@@ -1,6 +1,6 @@
 # Setting up the Yacrum plugin
 
-The plugin gives Claude five sales routines that run on your Yacrum data, and two for an Admin:
+The plugin gives Claude six sales routines that run on your Yacrum data, and three for an Admin:
 
 | Skill | What it does |
 |---|---|
@@ -9,7 +9,8 @@ The plugin gives Claude five sales routines that run on your Yacrum data, and tw
 | `/yacrum:account-pulse` | A one-page brief before a meeting |
 | `/yacrum:pipeline-review` | The weekly review: what moved, slipped, closed and appeared, what is ready to advance and what a stage gate blocks |
 | `/yacrum:qualify-opportunity` | Score an opportunity with you, answer by answer, then say which stage gates are met and offer the next move |
-| `/yacrum:setup` | For an Admin: a step-by-step setup that explains as it goes — the profile with its opportunity stages and scoring, then the features, then a summary to approve before anything is saved |
+| `/yacrum:reconcile-quote` | Check an external quote's own document against its line items, and fix the lines you confirm |
+| `/yacrum:setup` | For an Admin: a step-by-step setup that explains as it goes — the opportunity team, stages, products, the forecast, quotes and scoring from a starter — then a summary to approve before anything is saved |
 | `/yacrum:scoring-template` | For an Admin: build an opportunity scoring template through an interview, and save it, as the default if you want |
 | `/yacrum:import` | For an Admin: bring in a Pipedrive or HubSpot export or a spreadsheet, with a report to confirm before anything is written |
 
