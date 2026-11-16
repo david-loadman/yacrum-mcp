@@ -10,7 +10,7 @@
       "name": "yacrum",
       "source": "./plugin",
       "description": "Morning signals, re-engaging an opportunity, an account pulse before a meeting, the weekly pipeline review, and qualifying an opportunity, on your Yacrum data. For Admins: setting up a workspace step by step, building a scoring template, and importing. Drafts go to your own mailbox; nothing is sent.",
-      "version": "0.5.0"
+      "version": "0.6.0"
     }
   ]
 }
