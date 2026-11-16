@@ -583,39 +583,89 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
     annotations: READ,
   }, async ({ since, scope, salesPersonId }) => run(() => yacrum.get('/pipeline/changes', { since, scope, salesPersonId }))());
 
-  server.registerTool('list_profiles', {
-    title: 'List the Profiles',
-    description: 'The seven Profiles a workspace can apply: each one\'s stages, scoring template and feature defaults. Admin, with a write key.',
+  server.registerTool('list_scoring_starters', {
+    title: 'List the scoring starters',
+    description: 'The three scoring templates setup can start from: Products, Services, and Products and services. Each comes whole: 10 questions in Fit, Economics, Authority, and Timing and Risk, their points, the A, B and C bands, and suggested stage gates (all off), each gate naming a stage by its position among the open stages. Admin, with a write key.',
     annotations: READ,
-  }, run(() => yacrum.get('/profiles')));
+  }, run(() => yacrum.get('/scoring-starters')));
 
   server.registerTool('get_workspace_setup', {
     title: 'How far the workspace is set up',
-    description: 'The workspace\'s Profile, stages, default template, hidden features, onboarding status and record counts. Admin, with a write key.',
+    description: 'Which setup path was taken (simple, full or none yet), the scoring starter installed, the stages with their ids, the default template, hidden features, quote settings, onboarding status and record counts. Admin, with a write key.',
     annotations: READ,
   }, run(() => yacrum.get('/workspace/setup')));
 
-  server.registerTool('apply_profile', {
-    title: 'Apply a Profile',
-    description: 'Apply a Profile to the workspace, or with dryRun true see what it would do and change nothing. Both answer with the same diff: the stages, the opportunities that move, the gates turned off and the feature changes. '
-      + 'Always dry-run first, show the user the diff, and apply only after an explicit yes, sending the same inputs with the diff\'s stageMap and dryRun false: a real apply needs a complete map. Opportunities keep their probability and time in stage, and no automation, webhook or mail fires. Admin, with a write key.',
+  const STARTER_GATE = z.object({
+    stagePosition: z.number().int().min(2).max(10).describe('Which open stage the gate guards, by its position in `stages` (1 is the first). A gate cannot guard the first stage'),
+    minValue: z.number().int().min(1).max(10).optional().describe('A scale question\'s minimum, 1 to 10'),
+    enabled: z.boolean().optional().describe('true enforces it. Absent or false: a suggestion that holds nobody'),
+  }).strict();
+  const STARTER_TEMPLATE = z.object({
+    name: z.string().trim().min(1).max(80),
+    tierMinimums: z.object({ a: z.number(), b: z.number(), c: z.number() }).describe('Points for Priority A, B and C'),
+    categories: z.array(z.object({
+      key: z.string().min(1),
+      name: z.string().min(1),
+      questions: z.array(z.object({
+        key: z.string().min(1).describe('Keep the starter\'s key; for a new question, any unique key such as q_new_1'),
+        label: z.string().min(1),
+        helpText: z.string().min(1).optional(),
+        kind: z.enum(['scale', 'select']),
+        weight: z.number().positive().describe('Points at a 10 answer = 10 × weight; a choice earns its score × weight'),
+        options: z.array(z.object({ key: z.string().min(1), label: z.string().min(1), score: z.number().min(0), passesGate: z.boolean().optional() })).optional(),
+        gate: STARTER_GATE.optional(),
+      })).min(1),
+    })).min(1),
+  });
+
+  server.registerTool('apply_setup', {
+    title: 'Apply setup',
+    description: 'Apply the workspace\'s setup, or with dryRun true see what it would do and change nothing. Both answer with the same diff: the stages (kept, renamed, new, removed), the features shown and hidden, the quote settings and the scoring template installed. '
+      + 'Always dry-run first, show the user the diff, and apply only after an explicit yes, sending exactly the same inputs with dryRun false. '
+      + 'A stage that holds opportunities, an enabled stage gate or an automation rule cannot be removed: Yacrum refuses, and nothing changes. No opportunity moves, and no automation, webhook or mail fires. Admin, with a write key.',
     inputSchema: {
-      profileKey: z.string().min(1).max(60).describe('A key from list_profiles'),
       dryRun: z.boolean().describe('true: change nothing and answer with the diff. false: apply it. Never false before the user has said yes to the diff'),
-      templateMode: z.enum(['install_default', 'keep_current']).describe('install_default: the Profile\'s template becomes the default. keep_current: the current default stays. A template is never deleted'),
-      stageMap: z.record(z.string(), z.number().int().positive()).optional().describe('Each open stage\'s id to a Profile stage\'s position. Absent on a dry run: the by-position default is suggested'),
-      stageNames: z.record(z.string(), z.string().trim().min(1).max(60)).optional().describe('Renames of the Profile\'s stages, by position'),
-      featureChanges: z.object({ quotes: z.boolean(), forecast: z.boolean(), deal_team: z.boolean(), casl: z.boolean() }).partial().strict().optional().describe('Each true for shown, false for hidden. Anything absent stays as it is'),
+      path: z.literal('full').describe('Claude always runs the full setup'),
+      team: z.enum(['seller', 'seller_fae']).describe('seller: one salesperson works an opportunity (hides the opportunity team). seller_fae: Sales Engineers can join an opportunity\'s team'),
+      stages: z.array(z.object({
+        id: z.string().optional().describe('An existing open stage\'s id from get_workspace_setup, to keep it (renamed or moved). Absent for a new stage'),
+        name: z.string().trim().min(1).max(60),
+        helpText: z.string().trim().max(300).nullable().optional().describe('What the stage means. Absent keeps an existing stage\'s'),
+      }).strict()).min(3).max(10).describe('Every open stage, in order. An existing open stage left out is removed'),
+      casl: z.boolean().optional().describe('true shows CASL consent (sells to Canadian customers). Absent leaves it as it is'),
+      products: z.boolean().optional().describe('true: a catalog of products and services (SKUs) that quote lines are picked from. false: lines are typed in'),
+      forecast: z.boolean().optional().describe('true shows the forecast'),
+      quotes: z.object({
+        mode: z.enum(['external', 'yacrum']).describe('external: the customer\'s own document, attached or linked, with optional lines. yacrum: Yacrum builds the PDF and an acceptance link'),
+        taxEnabled: z.boolean(),
+        incotermsEnabled: z.boolean(),
+        defaultIncoTerm: z.enum(['EXW', 'FCA', 'DAP']).nullable(),
+        shippingEnabled: z.boolean(),
+      }).strict().optional().describe('Absent leaves the quote settings as they are'),
+      scoring: z.object({
+        starterKey: z.enum(['products', 'services', 'products_services']),
+        template: STARTER_TEMPLATE.describe('The starter\'s template from list_scoring_starters, as the user changed it'),
+      }).strict().nullable().optional().describe('A template to install as the default; null turns opportunity scoring off; absent leaves scoring as it is'),
     },
     annotations: CONSEQUENTIAL,
-  }, async (input) => run(() => yacrum.post('/workspace/profile', input))());
+  }, async (input) => run(() => yacrum.post('/workspace/setup', input))());
 
   server.registerTool('set_workspace_features', {
     title: 'Show or hide features',
-    description: 'Show or hide quotes, forecast, deal_team and casl for the workspace, each true for shown. Hiding only hides: it authorizes nothing and removes nothing. Say what will change and get a yes first. Admin, with a write key.',
-    inputSchema: { quotes: z.boolean().optional(), forecast: z.boolean().optional(), deal_team: z.boolean().optional(), casl: z.boolean().optional() },
+    description: 'Show or hide quotes, forecast, deal_team (the opportunity team), casl, products and scoring for the workspace, each true for shown. Hiding only hides: it authorizes nothing and removes nothing. Say what will change and get a yes first. Admin, with a write key.',
+    inputSchema: {
+      quotes: z.boolean().optional(), forecast: z.boolean().optional(), deal_team: z.boolean().optional(), casl: z.boolean().optional(),
+      products: z.boolean().optional(), scoring: z.boolean().optional(),
+    },
     annotations: UPDATES,
   }, async (features) => run(() => yacrum.patch('/workspace/features', features))());
+
+  server.registerTool('get_quote_document', {
+    title: 'An external quote\'s document',
+    description: 'For a quote marked external: the link to the customer\'s own quote document, or a short-lived URL to its PDF. Read it to compare with the quote\'s line items from get_quote. Any member who can see the quote.',
+    inputSchema: { quoteId: ID },
+    annotations: READ,
+  }, async ({ quoteId }) => run(() => yacrum.get(`/quotes/${encodeURIComponent(quoteId)}/document`))());
 
   server.registerTool('get_import_templates', {
     title: 'Import templates',

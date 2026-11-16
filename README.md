@@ -68,9 +68,10 @@ claude mcp add yacrum --env YACRUM_API_KEY=yk_your_key_here -- npx -y yacrum-mcp
 | `score_opportunity` | Score a deal, or change its answers or template (switching template deletes the old answers) |
 | `stage_readiness` | The stage gates ahead of a deal, met or not, and the next stage when all of its gates are met |
 | `deal_context` | Everything about one deal in one read, to summarize it or draft to it, with the CASL consent facts for its contacts |
-| `list_profiles`, `get_workspace_setup` | The seven Profiles, and how far the workspace is set up (Admin) |
-| `apply_profile` | Apply a Profile. `dryRun` is required: `true` answers with the diff and changes nothing (Admin) |
-| `set_workspace_features` | Show or hide Quotes, Forecast, Deal team and CASL. Hiding authorizes nothing (Admin) |
+| `list_scoring_starters`, `get_workspace_setup` | The three scoring starters (Products, Services, Products and services), and how far the workspace is set up (Admin) |
+| `apply_setup` | Apply the workspace's setup: the opportunity team, stages, products, forecast, quote settings and a scoring template. `dryRun` is required: `true` answers with the diff and changes nothing (Admin) |
+| `set_workspace_features` | Show or hide Quotes, Forecast, the opportunity team, CASL, Products and services, and Scoring. Hiding authorizes nothing (Admin) |
+| `get_quote_document` | An external quote's own document: its link, or a short-lived address for its PDF |
 | `get_import_templates` | The spreadsheet templates, and what each CRM's export looks like (Admin) |
 | `preview_import` | Upload an export or spreadsheet from this computer, save the answers, and see what the import would do. Nothing reaches the workspace's records (Admin) |
 | `import_records`, `get_import_status`, `undo_import` | Run an import (call again while `more` is true), see where it has got, and undo it, all or none (Admin) |
@@ -90,7 +91,7 @@ Every tool says what it does, so your AI client can ask before a write:
 | Updates | `update_opportunity`, `set_sales_health`, `update_action_item`, `snooze_signal`, `unsnooze_signal`, `set_workspace_features` | not destructive, idempotent |
 | A stage move | `move_opportunity_stage` | **destructive**: a lost or paused stage records a reason and changes the forecast. A stage gate can refuse it (409 `stage_gate`); an Admin or Management member may override it with `overrideReason` |
 | Scoring | `score_opportunity` | **destructive**, idempotent: switching a scored deal's template deletes its answers |
-| Setup and imports | `apply_profile`, `import_records`, `undo_import` | **destructive**: each changes the workspace's stages or many records at once. Show the diff or preview and get a yes first |
+| Setup and imports | `apply_setup`, `import_records`, `undo_import` | **destructive**: each changes the workspace's stages or many records at once. Show the diff or preview and get a yes first |
 
 **Files for an import are read from your computer.** `preview_import` takes full paths and reads only regular `.csv`
 and `.xlsx` files, never through a symlink, at most 12 files, 10 MB each and 25 MB together. Anything else is refused
@@ -101,11 +102,11 @@ connector: draft in your mailbox with the BCC from `get_outreach_settings`, and 
 
 ## The Claude plugin
 
-[`plugin/`](./plugin) packages this server with five sales routines: morning signals, re-engaging a deal,
-an account pulse before a meeting, the weekly pipeline review and qualifying an opportunity. Outreach is drafted
+[`plugin/`](./plugin) packages this server with six sales routines: morning signals, re-engaging a deal,
+an account pulse before a meeting, the weekly pipeline review, qualifying an opportunity and reconciling an external quote. Outreach is drafted
 in your own mailbox with your workspace's logging address in BCC. Nothing is sent.
 
-It also has three for an Admin: `/yacrum:setup` walks you through the profile, its stages and scoring, and the features, explaining each, and saves only once you agree;
+It also has `/yacrum:reconcile-quote`, which checks an external quote's own document against its line items, and three for an Admin: `/yacrum:setup` walks you through the full setup (the opportunity team, stages, products, the forecast, quotes and scoring), explaining each, and saves only once you agree;
 `/yacrum:scoring-template` builds a scoring template with you;
 and `/yacrum:import` brings in a Pipedrive or HubSpot export or a spreadsheet. All three need an Admin's write key and a
 local server, so they work in Claude Code and Claude Desktop, and not on claude.ai on the web.

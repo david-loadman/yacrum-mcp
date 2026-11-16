@@ -67,8 +67,8 @@ Show the whole template:
 
 Ask for changes until the Admin is happy.
 
-- **Name:** a new name, never a template's that exists. A customized copy of a profile's template is
-  "<profile template name> — custom".
+- **Name:** a new name, never a template's that exists. A customized copy of a template is
+  "<template name> — custom".
 - Ask whether to make it the **default**: the template new scores start on. Existing scores keep theirs.
 
 On an explicit yes, call `create_scoring_template` with:
