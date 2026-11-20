@@ -47,8 +47,8 @@ Give **every** section below, in this order, under its own heading. When a secti
   as a G opportunity that slipped twice.
 - **Ready to advance:** each opportunity whose `readyFor` is set. Name the stage it can move to. Offer the move;
   never make it unasked.
-- **Blocked by a gate:** each opportunity whose next stage has an unmet gate. Name what is missing (a scoring
-  answer, or a sent quote) and the action that would meet it.
+- **Blocked by a gate:** each opportunity whose next stage has an unmet gate. Name what is missing (a Qualification
+  answer, by key, or a sent quote) and the action that would meet it.
 - **The forecast:** this month and next.
 
 ## 4. A shareable report

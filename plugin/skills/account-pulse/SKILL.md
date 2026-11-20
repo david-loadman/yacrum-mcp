@@ -34,7 +34,7 @@ Read these elsewhere:
 One page, in this order:
 - **Who:** the attendees and their roles, with the Yacrum contacts matched.
 - **Where things stand:**
-  - each open opportunity: its stage, amount, expected close, qualification tier and Sales Health (G/Y/R and its note, from `deal_context`)
+  - each open opportunity: its stage, amount, expected close, Qualification score and weakest letter, Fit tier, and Sales Health (G/Y/R and its note, from `deal_context`)
   - the latest quote and its status
   - the last activity, and when it was
 - **Open items:** the action items, with their owners and due dates.

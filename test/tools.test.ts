@@ -116,22 +116,101 @@ describe('the Yacrum MCP server', () => {
     expect(yacrum.calls).toHaveLength(1);
   });
 
-  it('scores an opportunity with PUT, naming the template as frameworkId, and reads the templates and the gates', async () => {
+  it('reads both frameworks, and saves Fit with PUT, naming the template as frameworkId, with notes per answer', async () => {
     yacrum = fakeYacrum({
-      'GET /scoring-templates': () => ({ body: { data: [{ id: 't1', name: 'Opportunity Score', isDefault: true }] } }),
+      'GET /qualification/settings': () => ({ body: { data: { questions: [{ key: 'A1', enabled: true, gate: null }], settings: { greenMin: 70 } } } }),
+      'GET /scoring-templates': () => ({ body: { data: [{ id: 't1', name: 'Fit', isDefault: true }] } }),
       'PUT /qualifications/o1': () => ({ body: { data: { id: 'o1', percent: 72.5 } } }),
       'GET /opportunities/o1/gates': () => ({ body: { data: { stages: [], readyFor: { stageId: 's2', stageName: 'Qualified' } } } }),
     });
     const client = await connect(yacrum.fetcher);
-    await client.callTool({ name: 'list_scoring_templates', arguments: {} });
-    expect(yacrum.calls[0]).toMatchObject({ method: 'GET' });
-    const scored = await client.callTool({ name: 'score_opportunity', arguments: { opportunityId: 'o1', templateId: 't2', answers: { q1: 7, q2: 'opt-1', q3: null } } });
+    const both = JSON.parse(text(await client.callTool({ name: 'list_scoring_templates', arguments: {} })));
+    expect(both).toEqual({
+      qualification: { questions: [{ key: 'A1', enabled: true, gate: null }], settings: { greenMin: 70 } },
+      fit: [{ id: 't1', name: 'Fit', isDefault: true }],
+    });
+    const scored = await client.callTool({ name: 'score_opportunity', arguments: {
+      opportunityId: 'o1', fit: { templateId: 't2', answers: { q1: 7, q2: 'opt-1', q3: null }, answerNotes: { q1: 'Standard SKU', q3: null } },
+    } });
     expect(scored.isError).toBeFalsy();
-    expect(yacrum.calls[1]).toMatchObject({ method: 'PUT', body: { frameworkId: 't2', answers: { q1: 7, q2: 'opt-1', q3: null } } });
-    await client.callTool({ name: 'score_opportunity', arguments: { opportunityId: 'o1', answers: { q1: 8 } } });
-    expect(yacrum.calls[2].body).toEqual({ answers: { q1: 8 } });
+    expect(JSON.parse(text(scored))).toEqual({ fit: { id: 'o1', percent: 72.5 } });
+    const put = yacrum.calls.find((c) => c.method === 'PUT');
+    expect(put?.url.pathname).toBe('/api/v1/qualifications/o1');
+    expect(put?.body).toEqual({ frameworkId: 't2', answers: { q1: 7, q2: 'opt-1', q3: null }, answerNotes: { q1: 'Standard SKU', q3: null } });
+    await client.callTool({ name: 'score_opportunity', arguments: { opportunityId: 'o1', fit: { answers: { q1: 8 } } } });
+    expect(yacrum.calls.at(-1)?.body).toEqual({ answers: { q1: 8 } });
     const ready = await client.callTool({ name: 'stage_readiness', arguments: { opportunityId: 'o1' } });
     expect(JSON.parse(text(ready)).readyFor.stageName).toBe('Qualified');
+  });
+
+  it('saves Qualification answers 0 to 3 by key, with notes and the people they are about, and refuses anything else (david-loadman/yacrum#511)', async () => {
+    const saved = { opportunityId: 'o1', score: { score: 42, weakest: 'A' }, proposal: { proposed: 'Y' } };
+    yacrum = fakeYacrum({ 'PUT /opportunities/o1/qualification': () => ({ body: { data: saved } }) });
+    const client = await connect(yacrum.fetcher);
+    const answers = { N1: { answer: 2, notes: 'Agreed on the 14 Oct call' }, A1: { answer: 1, contactIds: ['p1', 'p2'] }, T1: { answer: 0, notes: null } };
+    const result = await client.callTool({ name: 'score_opportunity', arguments: { opportunityId: 'o1', qualification: answers } });
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(text(result))).toEqual({ qualification: saved });
+    expect(yacrum.calls).toHaveLength(1);
+    expect(yacrum.calls[0]).toMatchObject({ method: 'PUT', body: { answers } });
+
+    for (const bad of [{ N1: { answer: 4 } }, { X1: { answer: 1 } }, { N4: { answer: 1 } }, { N1: { answer: 1.5 } }]) {
+      expect((await client.callTool({ name: 'score_opportunity', arguments: { opportunityId: 'o1', qualification: bad } })).isError).toBe(true);
+    }
+    expect((await client.callTool({ name: 'score_opportunity', arguments: { opportunityId: 'o1' } })).isError).toBe(true);
+    expect((await client.callTool({ name: 'score_opportunity', arguments: { opportunityId: 'o1', qualification: {} } })).isError).toBe(true);
+    expect(yacrum.calls).toHaveLength(1);
+  });
+
+  it('⛔ says the Qualification answers were saved when Fit is then refused, so they are not sent twice', async () => {
+    yacrum = fakeYacrum({
+      'PUT /opportunities/o1/qualification': () => ({ body: { data: { score: { score: 25 } } } }),
+      'PUT /qualifications/o1': () => ({ status: 403, body: { error: { code: 'forbidden', message: 'Only the scorer may change it' } } }),
+    });
+    const client = await connect(yacrum.fetcher);
+    const result = await client.callTool({ name: 'score_opportunity', arguments: {
+      opportunityId: 'o1', qualification: { E1: { answer: 2 } }, fit: { answers: { q1: 5 } },
+    } });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(/^The Qualification answers WERE saved\. Fit was not\.\nYacrum refused \(403 forbidden\): Only the scorer may change it/);
+  });
+
+  it('reads both scores, with fit null when the opportunity has no Fit score, and relays a missing opportunity', async () => {
+    const neat = { opportunityId: 'o1', score: { score: 68, weakest: 'A' }, proposal: { proposed: 'Y' } };
+    yacrum = fakeYacrum({
+      'GET /opportunities/o1/qualification': () => ({ body: { data: neat } }),
+      'GET /qualifications/o1': () => ({ status: 404, body: { error: { code: 'not_found', message: 'Qualification not found' } } }),
+    });
+    const client = await connect(yacrum.fetcher);
+    expect(JSON.parse(text(await client.callTool({ name: 'qualification_score', arguments: { opportunityId: 'o1' } }))))
+      .toEqual({ qualification: neat, fit: null });
+    const missing = await client.callTool({ name: 'qualification_score', arguments: { opportunityId: 'o9' } });
+    expect(missing.isError).toBe(true);
+    expect(text(missing)).toContain('404 not_found');
+  });
+
+  it('names the deal context\'s two scores qualification and fit', async () => {
+    yacrum = fakeYacrum({ 'GET /opportunities/o1/context': () => ({ body: { data: {
+      opportunity: { id: 'o1' }, qualification: { percent: 80, tier: 'A' }, neat: { score: { score: 50 } }, gates: { readyFor: null },
+    } } }) });
+    const client = await connect(yacrum.fetcher);
+    expect(JSON.parse(text(await client.callTool({ name: 'deal_context', arguments: { opportunityId: 'o1' } })))).toEqual({
+      opportunity: { id: 'o1' }, qualification: { score: { score: 50 } }, fit: { percent: 80, tier: 'A' }, gates: { readyFor: null },
+    });
+  });
+
+  it('changes the Qualification questions and thresholds in one PATCH, and refuses a gate above 3', async () => {
+    const { calls, fetcher } = fakeYacrum({ 'PATCH /qualification/settings': () => ({ body: { data: { questions: [], settings: {} } } }) });
+    const client = await connect(fetcher);
+    const change = {
+      questions: { A1: { gate: { stageId: 's-prop', minValue: 2 } }, N3: { enabled: false }, T2: { helpText: null, gateEnabled: false } },
+      settings: { greenMin: 75, lateFromStageId: null },
+    };
+    expect((await client.callTool({ name: 'update_qualification_settings', arguments: change })).isError).toBeFalsy();
+    expect(calls[0]).toMatchObject({ method: 'PATCH', body: change });
+    const tooHigh = await client.callTool({ name: 'update_qualification_settings', arguments: { questions: { A1: { gate: { stageId: 's', minValue: 7 } } } } });
+    expect(tooHigh.isError).toBe(true);
+    expect(calls).toHaveLength(1);
   });
 
   it('sends an override reason as override, and passes a 409 stage_gate through with what is unmet', async () => {
@@ -236,10 +315,11 @@ describe('the signals, outreach, quote, action-item and pipeline-changes tools (
     for (const name of ['move_opportunity_stage', 'apply_setup', 'import_records', 'undo_import', 'delete_stage', 'set_default_scoring_template']) {
       expect([name, tools[name]]).toEqual([name, { readOnlyHint: false, destructiveHint: true }]);
     }
-    // ⚑ Scoring on another template deletes the old answers.
+    // ⚑ Scoring on another template deletes the old answers; a gate holds every opportunity, and null forgets one.
     expect(tools.score_opportunity).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
+    expect(tools.update_qualification_settings).toEqual({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     // Every tool is in one of the lists above: none is left unannotated.
-    expect(Object.keys(tools)).toHaveLength(reads.length + 9 + 8 + 6 + 1 + 2);
+    expect(Object.keys(tools)).toHaveLength(reads.length + 9 + 8 + 6 + 2 + 2);
   });
 });
 
@@ -293,9 +373,13 @@ describe('the setup and import tools (#405)', () => {
     expect(simple.isError).toBe(true);
     expect(calls).toHaveLength(0);
 
-    await client.callTool({ name: 'apply_setup', arguments: { path: 'full', team: 'seller_fae', stages, dryRun: true, casl: true, scoring: null } });
+    const qualification = { off: ['N3', 'T3'] };
+    await client.callTool({ name: 'apply_setup', arguments: { path: 'full', team: 'seller_fae', stages, dryRun: true, casl: true, scoring: null, qualification } });
     expect(calls[0].url.pathname).toBe('/api/v1/workspace/setup');
-    expect(calls[0]).toMatchObject({ method: 'POST', body: { path: 'full', team: 'seller_fae', stages, dryRun: true, casl: true, scoring: null } });
+    expect(calls[0]).toMatchObject({ method: 'POST', body: { path: 'full', team: 'seller_fae', stages, dryRun: true, casl: true, scoring: null, qualification } });
+    const badKey = await client.callTool({ name: 'apply_setup', arguments: { path: 'full', team: 'seller', stages, dryRun: true, qualification: { off: ['F1'] } } });
+    expect(badKey.isError).toBe(true);
+    expect(calls).toHaveLength(1);
   });
 
   it('reads an external quote\'s document', async () => {
@@ -468,7 +552,7 @@ describe('the stage, template, SKU and lead writes (david-loadman/yacrum#471)', 
     expect(text(refused)).toMatch(/409 constraint_violation\): A stage with opportunities in it cannot be deleted/);
   });
 
-  it('creates a whole template and makes one the default', async () => {
+  it('⛔ creates a whole Fit template with no gate, and makes one the default (david-loadman/yacrum#511: only Qualification gates)', async () => {
     const { calls, fetcher } = fakeYacrum({
       'POST /scoring-templates': () => ({ status: 201, body: { data: { id: 't1', name: 'Robotics — custom' } } }),
       'PUT /scoring-templates/t1/default': () => ({ body: { data: null } }),
@@ -476,8 +560,11 @@ describe('the stage, template, SKU and lead writes (david-loadman/yacrum#471)', 
     const client = await connect(fetcher);
     const template = {
       name: 'Robotics — custom', tierMinimums: { a: 16, b: 12, c: 8 }, makeDefault: false,
-      categories: [{ name: 'Fit', questions: [{ label: 'Budget', kind: 'scale', weight: 1, gate: { stageId: 'q', minValue: 7 } }] }],
+      categories: [{ name: 'Tactical', questions: [{ label: 'Margin', kind: 'scale', weight: 1, helpText: '10 above target' }] }],
     };
+    const gated = { ...template, categories: [{ name: 'Tactical', questions: [{ label: 'Margin', kind: 'scale', weight: 1, gate: { stageId: 'q', minValue: 7 } }] }] };
+    expect((await client.callTool({ name: 'create_scoring_template', arguments: gated })).isError).toBe(true);
+    expect(calls).toHaveLength(0);
     await client.callTool({ name: 'create_scoring_template', arguments: template });
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual(template);
     await client.callTool({ name: 'set_default_scoring_template', arguments: { templateId: 't1' } });
@@ -521,6 +608,18 @@ describe('the plugin\'s skills (david-loadman/yacrum#472)', () => {
 
   /** Words a skill quotes that look like tools and are not: a feature key the skill tells Claude never to show. */
   const NOT_TOOLS = new Set(['deal_team']);
+
+  it('⛔ prints the method\'s name in no skill and no tool description, until its owner agrees (david-loadman/yacrum D266, OQ7)', async () => {
+    const NAME = /N\.?\s?E\.?\s?A\.?\s?T\.?(?![a-z])/;
+    const client = await connect(fakeYacrum({}).fetcher);
+    const printed: string[] = [];
+    for (const tool of (await client.listTools()).tools) if (NAME.test(JSON.stringify(tool))) printed.push(`tool ${tool.name}`);
+    const pluginDir = fileURLToPath(new URL('../plugin', import.meta.url));
+    const skillsDir = join(pluginDir, 'skills');
+    for (const skill of readdirSync(skillsDir)) if (NAME.test(readFileSync(join(skillsDir, skill, 'SKILL.md'), 'utf8'))) printed.push(`skill ${skill}`);
+    for (const doc of [join(pluginDir, 'SETUP.md'), fileURLToPath(new URL('../README.md', import.meta.url))]) if (NAME.test(readFileSync(doc, 'utf8'))) printed.push(doc);
+    expect(printed).toEqual([]);
+  });
 
   it('⛔ names only tools the server has, so a skill never calls one that is missing', async () => {
     const client = await connect(fakeYacrum({}).fetcher);

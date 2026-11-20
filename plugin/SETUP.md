@@ -8,10 +8,10 @@ The plugin gives Claude six sales routines that run on your Yacrum data, and thr
 | `/yacrum:re-engage` | Revive a lost, paused or quiet opportunity with an email draft and a follow-up |
 | `/yacrum:account-pulse` | A one-page brief before a meeting |
 | `/yacrum:pipeline-review` | The weekly review: what moved, slipped, closed and appeared, what is ready to advance and what a stage gate blocks |
-| `/yacrum:qualify-opportunity` | Score an opportunity with you, answer by answer, then say which stage gates are met and offer the next move |
+| `/yacrum:qualify-opportunity` | Qualify an opportunity with you, answer by answer, with notes and the people each is about; then offer the stage gates that are met and a Sales Health update, and Fit if you want it |
 | `/yacrum:reconcile-quote` | Check an external quote's own document against its line items, and fix the lines you confirm |
-| `/yacrum:setup` | For an Admin: a step-by-step setup that explains as it goes — the opportunity team, stages, products, the forecast, quotes and scoring from a starter — then a summary to approve before anything is saved |
-| `/yacrum:scoring-template` | For an Admin: build an opportunity scoring template through an interview, and save it, as the default if you want |
+| `/yacrum:setup` | For an Admin: a step-by-step setup that explains as it goes — the opportunity team, stages, products, the forecast, quotes, which Qualification questions apply, and a Fit template from a starter — then a summary to approve before anything is saved |
+| `/yacrum:scoring-template` | For an Admin: settle which Qualification questions apply and any stage gates, and build a Fit template through an interview, saved as the default if you want |
 | `/yacrum:import` | For an Admin: bring in a Pipedrive or HubSpot export or a spreadsheet, with a report to confirm before anything is written |
 
 ⛔ **Nothing is ever sent.** Emails are created as **drafts in your own mailbox** for you to read and send.
