@@ -51,6 +51,8 @@ const UPDATES = { readOnlyHint: false, destructiveHint: false, idempotentHint: t
 const CONSEQUENTIAL = { readOnlyHint: false, destructiveHint: true } as const;
 /** A write that can delete: scoring on another template drops the old answers. Repeating it changes nothing more. */
 const REPLACES = { readOnlyHint: false, destructiveHint: true, idempotentHint: true } as const;
+/** A workspace rule: a stage gate holds every opportunity, and null forgets one. Repeating it changes nothing more. */
+const RULES = { readOnlyHint: false, destructiveHint: true, idempotentHint: true } as const;
 
 const SIGNAL_TYPES = [
   'deal.stale', 'deal.slipping', 'deal.no_next_step', 'quote.quiet', 'quote.expiring',
@@ -62,6 +64,17 @@ const IMPORT_CALL_MS = 45_000;
 
 const ID = z.string().min(1);
 const DAY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
+
+/**
+ * Yacrum's deal context names Fit `qualification` and Qualification by the method's own name, which the product does
+ * not print until its owner agrees (david-loadman/yacrum D266). The tools say `qualification` and `fit`, as
+ * `qualification_score` does, so the model sees one vocabulary.
+ */
+export function withScoreNames(context: Record<string, Json>): Record<string, Json> {
+  if (!context || typeof context !== 'object' || !('neat' in context)) return context;
+  const { neat, qualification, ...rest } = context;
+  return { ...rest, qualification: neat, fit: qualification ?? null };
+}
 
 export function registerTools(server: McpServer, yacrum: YacrumClient, importCallMs = IMPORT_CALL_MS): void {
   const me = () => yacrum.get<Me>('/me');
@@ -207,7 +220,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
 
   server.registerTool('set_sales_health', {
     title: 'Set an opportunity\'s Sales Health',
-    description: 'Set a deal\'s Sales Health — G on track, Y at risk, R off track — with a note saying why (Admin or Sales; a Sales Engineer on its deal team). The status and its note are always set together: a status with no reason is half an answer. Read the current one from deal_context (opportunity.status and statusDescription) first, and propose the change to the user before making it.',
+    description: 'Set a deal\'s Sales Health — G on track, Y at risk, R off track — with a note saying why (Admin or Sales; a Sales Engineer on its deal team). The status and its note are always set together: a status with no reason is half an answer. Read the current one from deal_context (opportunity.status and statusDescription) first. Yacrum proposes a colour from the Qualification score, its weakest letter and how recent the answers are (qualification_score: qualification.proposal); it never sets one itself, and neither may you: propose the status and note to the user, with why, and call this only after they approve that change. Fit never sets Sales Health.',
     inputSchema: {
       opportunityId: ID,
       status: z.enum(['G', 'Y', 'R']).describe('G on track, Y at risk, R off track'),
@@ -221,7 +234,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
   server.registerTool('move_opportunity_stage', {
     title: 'Move an opportunity to a stage',
     description: 'Move a deal to one of the workspace\'s stages (ids from get_pipeline). A lost stage needs a lostReasonId (and competitorName when the reason asks); a paused stage needs a pauseReason. '
-      + 'A forward move is held to the stage gates of every stage up to the target: scoring answers and, on some stages, a sent quote. If one is unmet Yacrum refuses with 409 stage_gate and lists what is missing — check stage_readiness first, and tell the user what is missing rather than retrying. '
+      + 'A forward move is held to the stage gates of every stage up to the target: Qualification answers (a question key such as A1, at least 1, 2 or 3) and, on some stages, a sent quote. Fit never gates a stage. If one is unmet Yacrum refuses with 409 stage_gate and lists what is missing — check stage_readiness first, and tell the user what is missing rather than retrying. '
       + 'Only an Admin or a Management member may move past an unmet gate, by sending overrideReason, and only when the user has said why; a Management member\'s key can make no other move. Never invent a reason.',
     inputSchema: {
       opportunityId: ID,
@@ -240,7 +253,8 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
 
   server.registerTool('stage_readiness', {
     title: 'Stage readiness',
-    description: 'The stage gates ahead of a deal: for each later stage, every gate (a scoring question with what passes and the answer now, or a sent quote) and whether it is met. readyFor is the next stage when every one of its gates is met — offer that move to the user; never make it on your own.',
+    description: 'The stage gates ahead of a deal: for each later stage, every gate and whether it is met. A gate is a Qualification question (kind question: its key, such as A1, and label, need such as "at least 2 · Confirmed", and now, the answer today or null when unanswered, which counts as 0 · Unknown) or a sent quote (kind quote). Fit never gates a stage. '
+      + 'readyFor is the next stage when every one of its gates is met — offer that move to the user; never make it on your own. To meet an unmet question gate, gather the evidence with the rep and save it with score_opportunity.',
     inputSchema: { opportunityId: ID },
     annotations: READ,
   }, async ({ opportunityId }) => run(() => yacrum.get(`/opportunities/${encodeURIComponent(opportunityId)}/gates`))());
@@ -352,34 +366,64 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
   }, async ({ currency }) => run(() => yacrum.get('/forecast', { currency }))());
 
   server.registerTool('list_scoring_templates', {
-    title: 'Scoring templates',
-    description: 'The workspace\'s scoring templates, the default first: each question (by id) with its kind — scale, answered 1 to 10, or select, answered with one of its options by id — its weight and guidance, the tiers, the most the template can score, and the stage gate a question is (the stage, and the minimum or the passing options). A gate with enabled false is only suggested and holds nobody to anything: never call it required. Read it before score_opportunity.',
+    title: 'Qualification questions and Fit templates',
+    description: 'The workspace\'s two scoring frameworks. '
+      + 'qualification: Yacrum\'s twelve fixed questions, three for each letter (N Need, E Economic impact, A Access to authority, T Timeline), each by key (N1 … T3) with its label, help text (what earns a 2 and a 3 for it), takesContacts (whether the people it is about may be attached), enabled, and its stage gate if any (stageId, minValue 1 to 3, enabled); and settings, the Sales Health proposal\'s thresholds (greenMin, greenLetterMinPct, redBelow, staleDays) and lateFromStageId (null: the first open stage at 50% or more). '
+      + 'Every question is answered 0 Unknown, 1 Claimed, 2 Confirmed or 3 Documented: how well it is known, not how good the news is. A switched-off question does not count, and its letter\'s other questions share the letter\'s 25 points. A gate with enabled false is only suggested and holds nobody to anything: never call it required. '
+      + 'fit: the workspace\'s Fit templates, the default first: each question (by id) with its kind — scale, answered 1 to 10, or select, answered with one of its options by id — its weight and guidance, the tiers, and the most the template can score. Fit ranks opportunities as Priority A, B or C and never gates a stage. Read it before score_opportunity.',
     inputSchema: {},
     annotations: READ,
-  }, async () => run(() => yacrum.get('/scoring-templates'))());
+  }, async () => run(async () => {
+    const [qualification, fit] = await Promise.all([yacrum.get('/qualification/settings'), yacrum.get('/scoring-templates')]);
+    return { qualification, fit };
+  })());
 
-  // ── Writing scoring templates whole (david-loadman/yacrum#471, D249) ───────
-  const OPTION = z.object({
-    label: z.string().min(1).max(80), score: z.number().min(-1000).max(1000),
-    passesGate: z.boolean().optional().describe('This choice meets the question\'s gate'),
-  });
+  // Qualification's own settings (david-loadman/yacrum#511): the questions are Yacrum's; a workspace switches them on or off, words their help, and gates stages on them.
+  // ⚑ The class is written [AENT], not in N, E, A, T order, so no schema spells the method's name (D266).
+  const QUESTION_KEY = z.string().regex(/^[AENT][1-3]$/, 'A question key is N1 to T3');
+
+  server.registerTool('update_qualification_settings', {
+    title: 'Change the Qualification settings',
+    description: 'Change the workspace\'s Qualification questions and its Sales Health proposal. Per question, by key (N1 … T3): enabled, to switch it off or on; helpText, its guidance (null restores Yacrum\'s); gate, a stage gate (stageId of an open or won stage from get_pipeline, and minValue 1, 2 or 3), saved on, or null to forget it; gateEnabled, to turn a gate off and keep it as a suggestion, or back on. '
+      + 'settings: greenMin, greenLetterMinPct, redBelow, staleDays and lateFromStageId (null: the default late stage). '
+      + 'Yacrum refuses switching off the last question on in a letter, and a gated question (clear its gate first); questions are changed one at a time in order, so a refusal names the one refused and the ones before it stand. No question is added, reworded or reordered. Only Qualification gates a stage, never Fit. '
+      + 'A gate holds every opportunity in the workspace: say exactly what will change and get the Admin\'s yes first. Admin, with a write key.',
+    inputSchema: {
+      questions: z.record(QUESTION_KEY, z.object({
+        enabled: z.boolean().optional(),
+        helpText: z.string().max(1000).nullable().optional().describe('null restores Yacrum\'s help text'),
+        gate: z.object({
+          stageId: ID.describe('An open or won stage from get_pipeline'),
+          minValue: z.union([z.literal(1), z.literal(2), z.literal(3)]).describe('The least answer that passes: 1 Claimed, 2 Confirmed, 3 Documented'),
+        }).nullable().optional().describe('Saved on; null forgets the gate'),
+        gateEnabled: z.boolean().optional().describe('false keeps the gate as a suggestion that holds nobody'),
+      }).strict()).optional().describe('By question key, N1 to T3'),
+      settings: z.object({
+        greenMin: z.number().int().min(1).max(100).optional().describe('Green needs at least this score'),
+        greenLetterMinPct: z.number().int().min(0).max(100).optional().describe('…and every letter at least this percent of its 25'),
+        redBelow: z.number().int().min(0).max(100).optional().describe('Red under this score'),
+        staleDays: z.number().int().min(1).max(365).optional().describe('Red when no answer changed in this many days at a late stage'),
+        lateFromStageId: z.string().nullable().optional().describe('The first late stage; null for the default'),
+      }).strict().optional(),
+    },
+    annotations: RULES,
+  }, async (change) => run(() => yacrum.patch('/qualification/settings', change))());
+
+  // ── Writing Fit templates whole (david-loadman/yacrum#471, D249) ───────────
+  const OPTION = z.object({ label: z.string().min(1).max(80), score: z.number().min(-1000).max(1000) }).strict();
   const QUESTION = z.object({
     label: z.string().min(1).max(200),
     kind: z.enum(['scale', 'select']).describe('scale: answered 1 to 10. select: one of its options'),
     weight: z.number().min(0).max(100).describe('Points per answer point: a scale answer of 10 with weight 1 scores 10'),
     helpText: z.string().max(500).optional().describe('Guidance shown with the question'),
     options: z.array(OPTION).optional().describe('A select question\'s choices, two or more; none on a scale'),
-    gate: z.object({
-      stageId: z.string().min(1).describe('An open or won stage from get_pipeline'),
-      minValue: z.number().int().min(1).max(10).optional().describe('A scale question: the least answer that passes'),
-      enabled: z.boolean().optional().describe('false: suggested only, holding nobody to anything. Default true'),
-    }).optional().describe('This question must pass before an opportunity enters the stage'),
-  });
+  }).strict();
 
   server.registerTool('create_scoring_template', {
-    title: 'Create a scoring template',
-    description: 'Create a whole scoring template: its tiers (points for Priority A, B and C, A highest), categories and questions, each a 1 to 10 scale or a choice with scored options, and any stage gates. '
-      + 'Nothing edits a template in place. To customize one, read it with list_scoring_templates, change the copy with the user, and create it under a new name, "<template name> — custom" for a Profile\'s; makeDefault true makes new scores start on it. '
+    title: 'Create a Fit template',
+    description: 'Create a whole Fit template: how well an opportunity serves the business\'s own goals. Its tiers (points for Priority A, B and C, A highest), categories and questions, each a 1 to 10 scale or a choice with scored options. '
+      + 'A Fit template has no stage gates: only Qualification gates a stage (update_qualification_settings). '
+      + 'Nothing edits a template in place. To customize one, read it with list_scoring_templates, change the copy with the user, and create it under a new name, "<template name> — custom"; makeDefault true makes new scores start on it. '
       + 'At most 30 questions and 10 templates. Show the user the whole template and get a yes first. Admin, with a write key.',
     inputSchema: {
       name: z.string().min(1).max(80),
@@ -452,35 +496,85 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
     annotations: UPDATES,
   }, async ({ leadId, ...change }) => run(() => yacrum.patch(`/leads/${encodeURIComponent(leadId)}`, change))());
 
+  const FIT_ANSWERS = z.record(z.string(), z.union([z.number().int().min(1).max(10), z.string().min(1), z.null()]))
+    .describe('By question id: 1–10 for scale, an option id for select, null to clear');
+
   server.registerTool('score_opportunity', {
     title: 'Score an opportunity',
-    description: 'Score a deal against a scoring template (Admin, Sales; changing a score: Admin, or Sales on one they made). Unscored, it is scored on templateId, or the default. Scored already, the answers sent are merged in — null clears one — and a different templateId SWITCHES the template, deleting every answer to the old one: say so and get a yes first. '
-      + 'Answers are by question id from list_scoring_templates: a whole number 1 to 10 for a scale question, an option id for a select one. Propose each answer with its reason and write only what the user confirms. Returns the score, its percent of the template\'s maximum, and its tier.',
+    description: 'Save a deal\'s Qualification answers, its Fit answers, or both (Admin, Sales; changing a Fit score: Admin, or Sales on one they made). Propose each answer with its evidence and write only what the user confirmed. '
+      + 'qualification: answers by question key (N1 … T3, from list_scoring_templates), each answer 0 Unknown, 1 Claimed, 2 Confirmed or 3 Documented, with notes (the details, in the rep\'s words; null clears) and contactIds (the people the answer is about, only on a question that takesContacts; the list sent replaces the one there, and [] clears it). Merged into what is there: a key not sent is kept. '
+      + 'fit: answers by question id from list_scoring_templates (a whole number 1 to 10 for a scale question, an option id for a select one, null clears), answerNotes by question id (null clears; a note on an unanswered question is not kept), and notes. Unscored, it is scored on templateId, or the default. Scored already, a different templateId SWITCHES the template, deleting every Fit answer to the old one: say so and get a yes first. '
+      + 'Saving moves no stage and sets no Sales Health. Returns what was saved: Qualification\'s score out of 100, weakest letter and Sales Health proposal; Fit\'s percent and tier.',
     inputSchema: {
       opportunityId: ID,
-      templateId: z.string().optional().describe('A template id from list_scoring_templates; the default when absent'),
-      answers: z.record(z.string(), z.union([z.number().int().min(1).max(10), z.string().min(1), z.null()]))
-        .describe('By question id: 1–10 for scale, an option id for select, null to clear'),
-      notes: z.string().max(5000).optional(),
+      qualification: z.record(QUESTION_KEY, z.object({
+        answer: z.number().int().min(0).max(3).describe('0 Unknown, 1 Claimed, 2 Confirmed, 3 Documented'),
+        notes: z.string().max(5000).nullable().optional(),
+        contactIds: z.array(z.string()).max(25).optional().describe('Contact ids from list_contacts or deal_context'),
+      }).strict()).optional().describe('By question key, N1 to T3'),
+      fit: z.object({
+        templateId: z.string().optional().describe('A Fit template id from list_scoring_templates; the default when absent'),
+        answers: FIT_ANSWERS,
+        answerNotes: z.record(z.string(), z.string().max(5000).nullable()).optional().describe('A note per answer, by question id'),
+        notes: z.string().max(5000).optional(),
+      }).strict().optional(),
     },
     annotations: REPLACES,
-  }, async ({ opportunityId, templateId, answers, notes }) => run(() => yacrum.put(`/qualifications/${encodeURIComponent(opportunityId)}`, {
-    answers, ...(templateId && { frameworkId: templateId }), ...(notes !== undefined && { notes }),
-  }))());
+  }, async ({ opportunityId, qualification, fit }): Promise<Result> => {
+    const id = encodeURIComponent(opportunityId);
+    const answering = !!qualification && Object.keys(qualification).length > 0;
+    if (!answering && !fit) return failed(new Error('Send qualification answers, fit answers, or both. Nothing was saved.'));
+    const saved: Record<string, Json> = {};
+    try {
+      if (answering) {
+        saved.qualification = await yacrum.put(`/opportunities/${id}/qualification`, { answers: qualification });
+      }
+      if (fit) {
+        saved.fit = await yacrum.put(`/qualifications/${id}`, {
+          answers: fit.answers,
+          ...(fit.templateId && { frameworkId: fit.templateId }),
+          ...(fit.answerNotes && { answerNotes: fit.answerNotes }),
+          ...(fit.notes !== undefined && { notes: fit.notes }),
+        });
+      }
+    } catch (error) {
+      const refusal = failed(error);
+      if (saved.qualification === undefined) return refusal;
+      // ⚑ Qualification was saved before Fit was refused: say both, so the model does not resend it.
+      return { ...refusal, content: [{ type: 'text', text: `The Qualification answers WERE saved. Fit was not.\n${refusal.content[0].text}\nSaved:\n${JSON.stringify(saved, null, 2)}` }] };
+    }
+    return ok(saved);
+  });
 
   server.registerTool('qualification_score', {
-    title: 'Qualification score',
-    description: 'A deal\'s score under its scoring template: each answer, the category and total scores, percent (of the template\'s maxScore — what deals are ranked by, across templates), the template, and its tier.',
+    title: 'An opportunity\'s two scores',
+    description: 'A deal\'s two scores, read apart. '
+      + 'qualification: does the buyer have a real, funded, reachable, time-bound reason to buy. Its questions, its answers by key (answer 0 to 3, notes, contactIds, when and by whom last changed; an unanswered question is 0), the score out of 100, each letter\'s points out of 18 (letters N, E, A, T), the weakest letter, when an answer last changed, and Yacrum\'s Sales Health proposal (proposed G, Y or R, with isLate and isStale). A high score means well qualified, not likely to win. Only Qualification gates a stage. '
+      + 'fit: how well the deal serves the business\'s own goals, or null when it has no Fit score. Each answer and its answerNotes, the category and total scores, percent (of the template\'s maxScore — what deals are ranked by, across templates), the template, and its tier A, B or C. Fit never gates a stage.',
     inputSchema: { opportunityId: ID },
     annotations: READ,
-  }, async ({ opportunityId }) => run(() => yacrum.get(`/qualifications/${encodeURIComponent(opportunityId)}`))());
+  }, async ({ opportunityId }) => run(async () => {
+    const id = encodeURIComponent(opportunityId);
+    const qualification = await yacrum.get(`/opportunities/${id}/qualification`);
+    let fit: Json = null;
+    try {
+      fit = await yacrum.get(`/qualifications/${id}`);
+    } catch (error) {
+      // No Fit score yet is an answer, not a failure: the opportunity exists, since Qualification was read.
+      if (!(error instanceof YacrumApiError && error.status === 404)) throw error;
+    }
+    return { qualification, fit };
+  })());
 
   server.registerTool('deal_context', {
     title: 'Deal context',
-    description: 'Everything about one deal in one read, to summarize it or draft to it: the deal (with its Sales Health as status G/Y/R and statusDescription), its company and contact, stage history, quotes, qualification, gates (the stage gates ahead and readyFor), open action items, notes, recent activity, whether you may edit it, and consent: the CASL facts (the company\'s last purchase; each contact\'s country and last inquiry) for the primary contact and the quote\'s contact. Facts, never a verdict.',
+    description: 'Everything about one deal in one read, to summarize it or draft to it: the deal (with its Sales Health as status G/Y/R and statusDescription), its company and contact, stage history, quotes, its two scores (qualification: the twelve questions\' answers, score out of 100, weakest letter and the Sales Health proposal; fit: the Fit template\'s answers, percent and tier, or null), gates (the stage gates ahead and readyFor), open action items, notes, recent activity, whether you may edit it, and consent: the CASL facts (the company\'s last purchase; each contact\'s country and last inquiry) for the primary contact and the quote\'s contact. Facts, never a verdict.',
     inputSchema: { opportunityId: ID },
     annotations: READ,
-  }, async ({ opportunityId }) => run(() => yacrum.get(`/opportunities/${encodeURIComponent(opportunityId)}/context`))());
+  }, async ({ opportunityId }) => run(async () => {
+    const context = await yacrum.get<Record<string, Json>>(`/opportunities/${encodeURIComponent(opportunityId)}/context`);
+    return withScoreNames(context);
+  })());
 
   server.registerTool('get_signals', {
     title: 'Signals: what is worth doing now',
@@ -585,7 +679,7 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
 
   server.registerTool('list_scoring_starters', {
     title: 'List the scoring starters',
-    description: 'The three scoring templates setup can start from: Products, Services, and Products and services. Each comes whole: 10 questions in Fit, Economics, Authority, and Timing and Risk, their points, the A, B and C bands, and suggested stage gates (all off), each gate naming a stage by its position among the open stages. Admin, with a write key.',
+    description: 'The three Fit templates setup can start from: Products, Services, and Products and services. Each comes whole: ten 1 to 10 questions in Tactical and Strategic (F1 to F10, equal weights; each starter words solution fit and return on effort its own way) and the A, B and C bands at 80, 65 and 50 percent. Fit ranks opportunities and has no stage gates; Qualification\'s questions are Yacrum\'s and are read with list_scoring_templates. Admin, with a write key.',
     annotations: READ,
   }, run(() => yacrum.get('/scoring-starters')));
 
@@ -595,11 +689,6 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
     annotations: READ,
   }, run(() => yacrum.get('/workspace/setup')));
 
-  const STARTER_GATE = z.object({
-    stagePosition: z.number().int().min(2).max(10).describe('Which open stage the gate guards, by its position in `stages` (1 is the first). A gate cannot guard the first stage'),
-    minValue: z.number().int().min(1).max(10).optional().describe('A scale question\'s minimum, 1 to 10'),
-    enabled: z.boolean().optional().describe('true enforces it. Absent or false: a suggestion that holds nobody'),
-  }).strict();
   const STARTER_TEMPLATE = z.object({
     name: z.string().trim().min(1).max(80),
     tierMinimums: z.object({ a: z.number(), b: z.number(), c: z.number() }).describe('Points for Priority A, B and C'),
@@ -612,15 +701,14 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
         helpText: z.string().min(1).optional(),
         kind: z.enum(['scale', 'select']),
         weight: z.number().positive().describe('Points at a 10 answer = 10 × weight; a choice earns its score × weight'),
-        options: z.array(z.object({ key: z.string().min(1), label: z.string().min(1), score: z.number().min(0), passesGate: z.boolean().optional() })).optional(),
-        gate: STARTER_GATE.optional(),
-      })).min(1),
+        options: z.array(z.object({ key: z.string().min(1), label: z.string().min(1), score: z.number().min(0) }).strict()).optional(),
+      }).strict()).min(1),
     })).min(1),
   });
 
   server.registerTool('apply_setup', {
     title: 'Apply setup',
-    description: 'Apply the workspace\'s setup, or with dryRun true see what it would do and change nothing. Both answer with the same diff: the stages (kept, renamed, new, removed), the features shown and hidden, the quote settings and the scoring template installed. '
+    description: 'Apply the workspace\'s setup, or with dryRun true see what it would do and change nothing. Both answer with the same diff: the stages (kept, renamed, new, removed), the features shown and hidden, the quote settings, the Qualification questions switched off, and the Fit template installed. '
       + 'Always dry-run first, show the user the diff, and apply only after an explicit yes, sending exactly the same inputs with dryRun false. '
       + 'A stage that holds opportunities, an enabled stage gate or an automation rule cannot be removed: Yacrum refuses, and nothing changes. No opportunity moves, and no automation, webhook or mail fires. Admin, with a write key.',
     inputSchema: {
@@ -645,7 +733,10 @@ export function registerTools(server: McpServer, yacrum: YacrumClient, importCal
       scoring: z.object({
         starterKey: z.enum(['products', 'services', 'products_services']),
         template: STARTER_TEMPLATE.describe('The starter\'s template from list_scoring_starters, as the user changed it'),
-      }).strict().nullable().optional().describe('A template to install as the default; null turns opportunity scoring off; absent leaves scoring as it is'),
+      }).strict().nullable().optional().describe('A Fit template to install as the default; null turns opportunity scoring off; absent leaves scoring as it is'),
+      qualification: z.object({
+        off: z.array(QUESTION_KEY).max(8).describe('The Qualification questions to switch off, by key; every other one is switched on. At least one question in each letter stays on, and a gated question stays on'),
+      }).strict().optional().describe('Which Qualification questions apply to this business. Absent leaves them as they are'),
     },
     annotations: CONSEQUENTIAL,
   }, async (input) => run(() => yacrum.post('/workspace/setup', input))());
