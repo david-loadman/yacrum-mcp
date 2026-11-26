@@ -1,6 +1,6 @@
 {
   "name": "yacrum",
-  "description": "Yacrum CRM for Claude: the MCP server and the sales routines that run on it",
+  "description": "RETIRED: Yacrum CRM for Claude is now a hosted connector at <your Yacrum address>/api/mcp. This marketplace stays readable.",
   "owner": {
     "name": "David Loadman",
     "url": "https://github.com/david-loadman"
@@ -9,8 +9,8 @@
     {
       "name": "yacrum",
       "source": "./plugin",
-      "description": "Morning signals, re-engaging an opportunity, an account pulse before a meeting, the weekly pipeline review, and qualifying an opportunity, on your Yacrum data. For Admins: setting up a workspace step by step, choosing the Qualification questions and gates, building a Fit template, and importing. Drafts go to your own mailbox; nothing is sent.",
-      "version": "0.7.0"
+      "description": "RETIRED: Yacrum now hosts its MCP server and serves these skills to every Claude app. Connect <your Yacrum address>/api/mcp as a connector instead, then uninstall this plugin. It keeps working until you do, but will not be updated.",
+      "version": "0.8.0"
     }
   ]
 }

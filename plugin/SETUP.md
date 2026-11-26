@@ -1,5 +1,8 @@
 # Setting up the Yacrum plugin
 
+> ⛔ **Retired.** Do not set this up: connect Yacrum's hosted server instead, as [`README.md`](./README.md) says.
+> This page is kept for existing installs.
+
 The plugin gives Claude six sales routines that run on your Yacrum data, and three for an Admin:
 
 | Skill | What it does |
