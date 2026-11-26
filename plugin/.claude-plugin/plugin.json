@@ -1,8 +1,8 @@
 {
   "name": "yacrum",
   "displayName": "Yacrum",
-  "version": "0.7.0",
-  "description": "Sales routines on your Yacrum CRM: morning signals, re-engaging an opportunity, an account pulse before a meeting, the weekly pipeline review, qualifying an opportunity with the rep (Qualification's twelve questions, the stage gates and a Sales Health proposal, and Fit), and reconciling an external quote with its lines. Setting up a workspace step by step, choosing the Qualification questions and gates and building a Fit template, and importing, for Admins. Outreach is drafted in your own mailbox with the workspace's logging address; nothing is ever sent.",
+  "version": "0.8.0",
+  "description": "RETIRED: Yacrum now hosts its MCP server and serves these skills to every Claude app. Connect <your Yacrum address>/api/mcp as a connector instead, then uninstall this plugin. It keeps working until you do, but will not be updated.",
   "author": { "name": "David Loadman", "url": "https://github.com/david-loadman" },
   "homepage": "https://github.com/david-loadman/yacrum-mcp/tree/main/plugin",
   "repository": "https://github.com/david-loadman/yacrum-mcp",

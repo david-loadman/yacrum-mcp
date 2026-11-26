@@ -1,5 +1,21 @@
 # yacrum-mcp
 
+> ⛔ **Retired.** Yacrum now hosts its MCP server, so there is nothing to install. **0.8.0 is the last release**
+> of this package, and it is deprecated on npm. Existing installs keep working, frozen as they are, and print
+> where to go instead each time they start.
+>
+> **Connect to the hosted server instead:** the address is `<your Yacrum address>/api/mcp`, and you sign in to
+> Yacrum once. No API key is needed. Yacrum's user guide and its *Set up with Claude* screen show each app's steps.
+>
+> - **claude.ai and Claude Desktop:** Settings → Connectors → **Add custom connector**, and paste the address.
+> - **Claude Code:** `claude mcp add --transport http yacrum <your Yacrum address>/api/mcp`
+>
+> The hosted server has the same tools as this one, and it also serves the skills that the Claude plugin used to
+> carry. Then remove `yacrum-mcp` from your MCP config, and uninstall the plugin if you have it
+> (`claude plugin uninstall yacrum@yacrum`).
+>
+> This repository stays readable and will be archived.
+
 An [MCP](https://modelcontextprotocol.io) server for the **Yacrum** CRM. It lets Claude Desktop, Claude Code
 and other MCP clients search, create and update your CRM records, log activity, read the pipeline and the
 forecast, and summarize a deal. Your own AI does the thinking; this server only fetches from Yacrum.
@@ -10,39 +26,8 @@ nothing more. A *read* key cannot change anything.
 
 ## Setup
 
-1. In Yacrum, an Admin opens **Administration → API Keys**, makes a key for you, and copies it. The key is
-   shown only once. Choose **Read and write** if you want the AI to create and update records.
-2. Add the server to your MCP client.
-
-### Claude Desktop
-
-Edit `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "yacrum": {
-      "command": "npx",
-      "args": ["-y", "yacrum-mcp"],
-      "env": {
-        "YACRUM_API_KEY": "yk_your_key_here",
-        "YACRUM_URL": "https://yacrum--yacrum.us-central1.hosted.app"
-      }
-    }
-  }
-}
-```
-
-### Claude Code
-
-```bash
-claude mcp add yacrum --env YACRUM_API_KEY=yk_your_key_here -- npx -y yacrum-mcp
-```
-
-| Variable | |
-|---|---|
-| `YACRUM_API_KEY` | Required. A key from Administration → API Keys (`yk_…`). |
-| `YACRUM_URL` | Your Yacrum address. Defaults to the Yacrum staging site. |
+There is none any more: see the notice above. Existing installs were configured with `YACRUM_API_KEY` (a `yk_…`
+key from Administration → API Keys) and `YACRUM_URL` (your Yacrum address), and keep working with them.
 
 ## Tools
 
@@ -102,24 +87,12 @@ before a byte is read or sent.
 Yacrum never sends email. To draft outreach, pair this server with your own Gmail or Microsoft 365
 connector: draft in your mailbox with the BCC from `get_outreach_settings`, and log it with `log_activity`.
 
-## The Claude plugin
+## The Claude plugin (retired)
 
-[`plugin/`](./plugin) packages this server with six sales routines: morning signals, re-engaging a deal,
-an account pulse before a meeting, the weekly pipeline review, qualifying an opportunity and reconciling an external quote. Outreach is drafted
-in your own mailbox with your workspace's logging address in BCC. Nothing is sent.
-
-It also has `/yacrum:reconcile-quote`, which checks an external quote's own document against its line items, and three for an Admin: `/yacrum:setup` walks you through the full setup (the opportunity team, stages, products, the forecast, quotes, Qualification and Fit), explaining each, and saves only once you agree;
-`/yacrum:scoring-template` settles which Qualification questions apply and any stage gates, and builds a Fit template with you;
-and `/yacrum:import` brings in a Pipedrive or HubSpot export or a spreadsheet. All three need an Admin's write key and a
-local server, so they work in Claude Code and Claude Desktop, and not on claude.ai on the web.
-
-```bash
-claude plugin marketplace add david-loadman/yacrum-mcp
-claude plugin install yacrum@yacrum
-```
-
-Setup, including the Gmail and Microsoft 365 connectors and email logging, is in
-[`plugin/SETUP.md`](./plugin/SETUP.md).
+[`plugin/`](./plugin) packaged this server with Yacrum's skills: the sales routines and, for an Admin, setup,
+the scoring template and import. **It is retired.** The hosted server serves the same skills to every Claude app,
+claude.ai on the web included, so the plugin has nothing left to carry. The marketplace stays readable, and an
+installed plugin keeps working until you remove it.
 
 ## Limits
 
@@ -128,6 +101,9 @@ An import uses about one call per 200 records.
 When a limit is reached, Yacrum's refusal says so, and the server passes it on to the AI as a tool error.
 
 ## Releasing
+
+⛔ **There are no more releases: 0.8.0 is the last.** After it, every version is deprecated with
+`npm deprecate yacrum-mcp "<message>"`. What follows is how 0.8.0 shipped.
 
 npm releases are **staged** and need a maintainer's approval with 2FA. A version goes live in three steps:
 

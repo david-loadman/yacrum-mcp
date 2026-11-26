@@ -1,7 +1,7 @@
 {
   "name": "yacrum-mcp",
-  "version": "0.7.0",
-  "description": "MCP server for Yacrum CRM: lets Claude and other MCP clients search, create and summarise CRM records through the Yacrum API.",
+  "version": "0.8.0",
+  "description": "RETIRED: Yacrum now hosts its MCP server at <your Yacrum address>/api/mcp. This was the local MCP server for Yacrum CRM; 0.8.0 is its last release.",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
